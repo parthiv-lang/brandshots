@@ -1,45 +1,67 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useEffect } from 'react';
+import { StatusBar } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { Provider, useDispatch } from 'react-redux';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
+import RootNavigator from './src/navigation/RootNavigator';
+import SignInScreen from './src/screens/SignInScreen';
+import { configureGoogleSignIn } from './src/services/auth/googleAuth';
+import { setUnauthorizedHandler } from './src/services/api/client';
 import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+  bootstrapAuth,
+  forceSignOut,
+  selectAuthStatus,
+  selectIsAuthenticated,
+} from './src/store/slices/authSlice';
+import { store, type AppDispatch } from './src/store';
+import { useAppSelector } from './src/store/hooks';
+import { colors } from './src/theme/colors';
+
+function RootGate() {
+  const dispatch = useDispatch<AppDispatch>();
+  const status = useAppSelector(selectAuthStatus);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+
+  useEffect(() => {
+    configureGoogleSignIn();
+    setUnauthorizedHandler(() => {
+      store.dispatch(forceSignOut());
+    });
+    dispatch(bootstrapAuth());
+
+    return () => {
+      setUnauthorizedHandler(null);
+    };
+  }, [dispatch]);
+
+  if (status !== 'ready') {
+    return null;
+  }
+
+  if (!isAuthenticated) {
+    return <SignInScreen />;
+  }
+
+  return (
+    <NavigationContainer>
+      <RootNavigator />
+    </NavigationContainer>
+  );
+}
 
 function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <Provider store={store}>
+      <SafeAreaProvider>
+        <StatusBar
+          backgroundColor={colors.background}
+          barStyle="dark-content"
+        />
+        <RootGate />
+      </SafeAreaProvider>
+    </Provider>
   );
 }
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 
 export default App;

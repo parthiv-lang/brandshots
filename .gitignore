@@ -1,9 +1,9 @@
 # OSX
-#
 .DS_Store
+*.swp
+*~
 
 # Xcode
-#
 build/
 *.pbxuser
 !default.pbxuser
@@ -13,58 +13,90 @@ build/
 !default.mode2v3
 *.perspectivev3
 !default.perspectivev3
-xcuserdata
+xcuserdata/
 *.xccheckout
 *.moved-aside
-DerivedData
+DerivedData/
 *.hmap
 *.ipa
 *.xcuserstate
 **/.xcode.env.local
 
-# Android/IntelliJ
-#
+# iOS signing & provisioning (never commit)
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+
+# Android / IntelliJ
 build/
-.idea
-.gradle
+.idea/
+.gradle/
 local.properties
 *.iml
 *.hprof
 .cxx/
 *.keystore
 !debug.keystore
+*.jks
 .kotlin/
+android/app/release/
+android/keystore.properties
+android/app/google-services.json
+
+# Firebase / Google Sign-In (if added later)
+GoogleService-Info.plist
+google-services.json
+
+# Secrets & environment (react-native-config, API keys, etc.)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+service-account*.json
+secrets.json
+**/secrets/
 
 # node.js
-#
 node_modules/
-npm-debug.log
-yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Metro / React Native
+.metro-health-check*
+*.jsbundle
 
 # fastlane
-#
-# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
-
 **/fastlane/report.xml
 **/fastlane/Preview.html
 **/fastlane/screenshots
 **/fastlane/test_output
 
-# Bundle artifact
-*.jsbundle
-
 # Ruby / CocoaPods
 **/Pods/
 /vendor/bundle/
 
-# Temporary files created by Metro to check the health of the file watcher
-.metro-health-check*
-
-# testing
+# Testing & coverage
 /coverage
+*.lcov
+
+# Logs & caches
+*.log
+.eslintcache
+.cache/
+tmp/
+temp/
+
+# Editor / IDE (local only)
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.sublime-workspace
 
 # Yarn
 .yarn/*
@@ -73,3 +105,8 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Misc local tooling
+.watchmanconfig.local
+.ruby-version.local
+.envrc
