@@ -7,26 +7,49 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SocialSignInButton from '../components/SocialSignInButton';
 import { isAppleSignInAvailable } from '../services/auth/appleAuth';
+import type { RootStackParamList } from '../navigation/types';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   clearAuthError,
   loginWithAppleThunk,
   loginWithGoogleThunk,
   selectAuthError,
+  selectIsAuthenticated,
   selectPendingProvider,
 } from '../store/slices/authSlice';
 import { colors } from '../theme/colors';
 
 function SignInScreen() {
   const dispatch = useAppDispatch();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'SignIn'>>();
+  const redirectTo = route.params?.redirectTo;
   const error = useAppSelector(selectAuthError);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const pendingProvider = useAppSelector(selectPendingProvider);
   const isBusy = pendingProvider !== null;
   const showAppleButton = isAppleSignInAvailable();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    if (redirectTo) {
+      navigation.replace(redirectTo);
+      return;
+    }
+
+    navigation.replace('MainTabs');
+  }, [isAuthenticated, navigation, redirectTo]);
 
   useEffect(() => {
     if (error) {
@@ -61,7 +84,9 @@ function SignInScreen() {
           <Text style={styles.eyebrow}>WORKSPACE</Text>
           <Text style={styles.title}>Sign in.</Text>
           <Text style={styles.subtitle}>
-            Access your account, plan, and credits.
+            {redirectTo === 'Paywall'
+              ? 'Sign in to view plans and upgrade your account.'
+              : 'Access your account, plan, and credits.'}
           </Text>
         </View>
 

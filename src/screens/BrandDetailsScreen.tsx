@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable as RNPressable,
   Pressable,
   ScrollView,
@@ -290,12 +292,17 @@ function BrandDetailsScreen({ navigation, route }: Props) {
         <View style={styles.headerRightSpacer} />
       </View>
 
-      <ScrollView
-        bounces={false}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardAvoiding}
       >
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}
+        >
         <View style={styles.fieldBlock}>
           <Text style={styles.fieldLabel}>BRAND OR CAMPAIGN</Text>
           <TextInput
@@ -496,6 +503,7 @@ function BrandDetailsScreen({ navigation, route }: Props) {
           <Text style={styles.footerSaveButtonText}>{actionButtonLabel}</Text>
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
 
       <BlockingLoadingOverlay
         message="Saving your brand kit…"
@@ -919,6 +927,12 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     backgroundColor: colors.background,
+    flex: 1,
+  },
+  keyboardAvoiding: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   saveButtonDisabled: {

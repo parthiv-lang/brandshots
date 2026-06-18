@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   ImageSourcePropType,
   Platform,
@@ -10,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -19,6 +21,8 @@ import {
   selectCredits,
   selectUser,
 } from '../store/slices/authSlice';
+import type { RootStackParamList } from '../navigation/types';
+import { openPaywall } from '../utils/openPaywall';
 import { colors } from '../theme/colors';
 
 const HORIZONTAL_PADDING = 18;
@@ -27,12 +31,6 @@ const profileIcon = require('../assets/profile-1341-svgrepo-com.png');
 const creditsIcon = require('../assets/electricity-svgrepo-com.png');
 const signOutSectionIcon = require('../assets/sign-out-svgrepo-com.png');
 const upgradeIcon = require('../assets/upgrade-svgrepo-com.png');
-
-const QUALITY_TIERS = [
-  { label: 'Fast', cost: '1 cr/variant' },
-  { label: 'Balanced', cost: '2 cr/variant' },
-  { label: 'Refined', cost: '4 cr/variant' },
-] as const;
 
 function getInitials(name?: string | null, email?: string | null) {
   const source = name?.trim() || email?.trim() || 'BS';
@@ -72,6 +70,8 @@ function SettingsIcon({
 
 function SettingsScreen() {
   const dispatch = useAppDispatch();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useAppSelector(selectUser);
   const credits = useAppSelector(selectCredits);
   const [isRefreshing, setRefreshing] = useState(false);
@@ -111,6 +111,34 @@ function SettingsScreen() {
     } finally {
       setSigningOut(false);
     }
+  };
+
+  const showSignOutAlert = () => {
+    if (isSigningOut) {
+      return;
+    }
+
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: () => {
+            void handleSignOut();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleUpgrade = () => {
+    openPaywall(navigation);
   };
 
   return (
@@ -163,7 +191,6 @@ function SettingsScreen() {
               <SettingsIcon source={creditsIcon} />
               <Text style={styles.sectionLabel}>PLAN & CREDITS</Text>
             </View>
-            <Text style={styles.sectionHint}>higher quality = more</Text>
           </View>
 
           <View style={styles.creditsCard}>
@@ -184,7 +211,11 @@ function SettingsScreen() {
                 )}
               </View>
 
-              <TouchableOpacity activeOpacity={0.9} style={styles.upgradeButton}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={handleUpgrade}
+                style={styles.upgradeButton}
+              >
                 <Image
                   resizeMode="contain"
                   source={upgradeIcon}
@@ -197,18 +228,6 @@ function SettingsScreen() {
             <Text style={styles.creditsBody}>
               You&apos;re on the Free plan. New accounts start with 5 credits.
             </Text>
-          </View>
-
-          <View style={styles.tierRow}>
-            {QUALITY_TIERS.map(tier => (
-              <View key={tier.label} style={styles.tierCard}>
-                <View style={styles.tierTitleRow}>
-                  <Text style={styles.tierLabel}>{tier.label}</Text>
-                  {/* <Icon color={colors.textMuted} name="check" size={12} /> */}
-                </View>
-                <Text style={styles.tierCost}>{tier.cost}</Text>
-              </View>
-            ))}
           </View>
         </View>
 
@@ -231,7 +250,7 @@ function SettingsScreen() {
             <TouchableOpacity
               activeOpacity={0.9}
               disabled={isSigningOut}
-              onPress={handleSignOut}
+              onPress={showSignOutAlert}
               style={[
                 styles.signOutButton,
                 isSigningOut && styles.signOutButtonDisabled,
@@ -444,36 +463,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginTop: 4,
-  },
-  tierCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-  },
-  tierCost: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 4,
-  },
-  tierLabel: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  tierRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-  },
-  tierTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
   },
   title: {
     color: colors.primary,

@@ -47,12 +47,18 @@ export type BrandDetailsParams = {
   isDefault?: boolean;
 };
 
+export type SignInParams = {
+  redirectTo?: 'Paywall';
+};
+
 export type RootStackParamList = {
+  SignIn: SignInParams | undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   UploadProduct: UploadProductParams;
   ProductShoot: ProductShootParams;
   ShootResults: ShootResultsParams;
   BrandDetails: BrandDetailsParams | undefined;
+  Paywall: undefined;
 };
 
 declare global {

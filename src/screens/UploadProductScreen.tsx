@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -240,7 +242,7 @@ function UploadProductScreen({ navigation, route }: Props) {
   const [materials, setMaterials] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
   const [packagingNotes, setPackagingNotes] = useState('');
-  const [isDetailsExpanded, setDetailsExpanded] = useState(true);
+  const [isDetailsExpanded, setDetailsExpanded] = useState(false);
   const [displayImageUri, setDisplayImageUri] = useState(imageUri ?? '');
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [statusFlags, setStatusFlags] = useState<StatusFlags>(
@@ -513,11 +515,17 @@ function UploadProductScreen({ navigation, route }: Props) {
         <View style={styles.headerBack} />
       </View>
 
-      <ScrollView
-        bounces={false}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardAvoiding}
       >
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}
+        >
         <View style={styles.heroBlock}>
           {heroStatusLabel ? (
             <View style={styles.heroStatusRow}>
@@ -720,6 +728,7 @@ function UploadProductScreen({ navigation, route }: Props) {
           <AppIcon color={colors.white} name="arrow-right" size={16} style={styles.nextButtonArrow} />
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
 
       <BlockingLoadingOverlay
         blur
@@ -988,6 +997,12 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     backgroundColor: colors.background,
+    flex: 1,
+  },
+  keyboardAvoiding: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   statusCheck: {

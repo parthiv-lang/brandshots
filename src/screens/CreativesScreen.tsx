@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import BlockingLoadingOverlay from '../components/BlockingLoadingOverlay';
 import CreativesFilterSelect, {
@@ -22,7 +24,9 @@ import { NICHES, VIBES } from '../constants/presets';
 import type { ApiError } from '../services/api';
 import type { ListGenerationsParams, PublicGeneration } from '../services/generations';
 import { generationsApi } from '../services/generations';
+import type { RootStackParamList } from '../navigation/types';
 import { colors } from '../theme/colors';
+import { buildShootResultsParamsFromGeneration } from '../utils/generationDisplay';
 
 const PAGE_LIMIT = 12;
 const HORIZONTAL_PADDING = 18;
@@ -30,6 +34,8 @@ const CARD_GAP = 8;
 const screenWidth = Dimensions.get('window').width;
 const cardWidth =
   (screenWidth - HORIZONTAL_PADDING * 2 - CARD_GAP) / 2;
+
+type CreativesNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 type WhenFilterKey = '24h' | '7d' | '30d';
 
@@ -84,6 +90,7 @@ function buildQueryParams(
 }
 
 function CreativesScreen() {
+  const navigation = useNavigation<CreativesNavigationProp>();
   const [items, setItems] = useState<PublicGeneration[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -194,6 +201,17 @@ function CreativesScreen() {
     );
   };
 
+  const handleGenerationPress = (generation: PublicGeneration) => {
+    if (deletingId) {
+      return;
+    }
+
+    navigation.navigate(
+      'ShootResults',
+      buildShootResultsParamsFromGeneration(generation),
+    );
+  };
+
   const clearAllFilters = () => {
     setPlatformKey(FILTER_ALL_KEY);
     setNicheKey(FILTER_ALL_KEY);
@@ -214,6 +232,7 @@ function CreativesScreen() {
       generation={item}
       isDeleting={deletingId === item.id}
       onDelete={() => handleDeletePress(item)}
+      onPress={() => handleGenerationPress(item)}
       previewVariant={index % 2 === 0 ? 'bag' : 'bottle'}
       width={cardWidth}
     />

@@ -5,14 +5,19 @@ import { Provider, useDispatch } from 'react-redux';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import RootNavigator from './src/navigation/RootNavigator';
-import SignInScreen from './src/screens/SignInScreen';
+import { navigationRef } from './src/navigation/navigationRef';
 import { configureGoogleSignIn } from './src/services/auth/googleAuth';
+import {
+  configureRevenueCat,
+  identifyRevenueCatUser,
+  logoutRevenueCatUser,
+} from './src/services/purchases/revenueCat';
 import { setUnauthorizedHandler } from './src/services/api/client';
+import { loadMe } from './src/services/storage/userStorage';
 import {
   bootstrapAuth,
   forceSignOut,
   selectAuthStatus,
-  selectIsAuthenticated,
 } from './src/store/slices/authSlice';
 import { store, type AppDispatch } from './src/store';
 import { useAppSelector } from './src/store/hooks';
@@ -21,11 +26,19 @@ import { colors } from './src/theme/colors';
 function RootGate() {
   const dispatch = useDispatch<AppDispatch>();
   const status = useAppSelector(selectAuthStatus);
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
 
   useEffect(() => {
     configureGoogleSignIn();
+    configureRevenueCat();
+
+    void loadMe().then(cached => {
+      if (cached?.user?.id) {
+        void identifyRevenueCatUser(cached.user.id);
+      }
+    });
+
     setUnauthorizedHandler(() => {
+      void logoutRevenueCatUser();
       store.dispatch(forceSignOut());
     });
     dispatch(bootstrapAuth());
@@ -39,12 +52,8 @@ function RootGate() {
     return null;
   }
 
-  if (!isAuthenticated) {
-    return <SignInScreen />;
-  }
-
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <RootNavigator />
     </NavigationContainer>
   );

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -598,7 +599,11 @@ function ShootDetailsModal({
       transparent
       visible={visible}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardAvoiding}
+      >
+        <View style={styles.overlay}>
         <BlurView
           blurAmount={8}
           blurType="light"
@@ -668,6 +673,7 @@ function ShootDetailsModal({
           </ScrollView>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -805,6 +811,9 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  keyboardAvoiding: {
+    flex: 1,
   },
   physicalHeaderRow: {
     alignItems: 'flex-start',

@@ -4,6 +4,7 @@ import {
   Dimensions,
   Image,
   ImageSourcePropType,
+  KeyboardAvoidingView,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -49,7 +50,9 @@ import {
 } from '../constants/platformIcons';
 import ShootDetailsModal from '../components/ShootDetailsModal';
 import CompactSelectDropdown from '../components/CompactSelectDropdown';
-import BlockingLoadingOverlay from '../components/BlockingLoadingOverlay';
+import GenerationProgressOverlay, {
+  type GenerationProgressStep,
+} from '../components/GenerationProgressOverlay';
 import { brandsApi } from '../services/brands';
 import { productsApi } from '../services/products';
 import {
@@ -105,6 +108,12 @@ const QUALITY_OPTIONS: Array<{ id: QualityId; label: string; credits: number }> 
     { id: 'ultra', label: 'ULTRA', credits: 4 },
   ];
 
+const QUALITY_PROGRESS_LABELS: Record<QualityId, string> = {
+  std: 'Standard',
+  hd: 'HD',
+  ultra: 'Ultra',
+};
+
 const QUANTITY_OPTIONS = [1, 2, 3] as const;
 
 const QUANTITY_SELECT_OPTIONS = QUANTITY_OPTIONS.map(count => ({
@@ -113,10 +122,13 @@ const QUANTITY_SELECT_OPTIONS = QUANTITY_OPTIONS.map(count => ({
 }));
 
 const HORIZONTAL_PADDING = 22;
+const SECTION_SPACING = 28;
+const SECTION_TITLE_GAP = 12;
 const STYLE_CARD_GAP = 14;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const STYLE_CARD_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2;
-const STYLE_CARD_HEIGHT = 240;
+const STYLE_CARD_HEIGHT = 300;
+const STYLE_CARD_SNAP_INTERVAL = STYLE_CARD_WIDTH + STYLE_CARD_GAP;
 
 const serifFont = Platform.select({ ios: 'Georgia', android: 'serif' });
 const monospaceFont = Platform.select({ ios: 'Menlo', android: 'monospace' });
@@ -264,6 +276,8 @@ function ProductShootScreen({ navigation, route }: Props) {
     EMPTY_SOCIAL_AD_SHOOT_DETAILS,
   );
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationComplete, setGenerationComplete] = useState(false);
+  const allowLeaveRef = useRef(false);
 
   const styleScrollRef = useRef<ScrollView>(null);
 
@@ -436,16 +450,41 @@ function ProductShootScreen({ navigation, route }: Props) {
     }
   }, [isCustomPlatform, platformSpecs, selectedSizeId]);
 
-  const handleStyleScrollEnd = useCallback(
+  const handleStyleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const index = Math.round(
-        event.nativeEvent.contentOffset.x / (STYLE_CARD_WIDTH + STYLE_CARD_GAP),
+      const index = Math.min(
+        categoryPresets.length - 1,
+        Math.max(
+          0,
+          Math.round(
+            event.nativeEvent.contentOffset.x / STYLE_CARD_SNAP_INTERVAL,
+          ),
+        ),
       );
       const preset = categoryPresets[index];
-      if (preset) {
-        setStyleCardIndex(index);
-        setSelectedPresetId(preset.id);
+      if (!preset) {
+        return;
       }
+
+      setStyleCardIndex(prev => (prev === index ? prev : index));
+      setSelectedPresetId(prev => (prev === preset.id ? prev : preset.id));
+    },
+    [categoryPresets],
+  );
+
+  const selectStylePresetAtIndex = useCallback(
+    (index: number) => {
+      const preset = categoryPresets[index];
+      if (!preset) {
+        return;
+      }
+
+      setSelectedPresetId(preset.id);
+      setStyleCardIndex(index);
+      styleScrollRef.current?.scrollTo({
+        animated: true,
+        x: Math.max(0, index) * STYLE_CARD_SNAP_INTERVAL,
+      });
     },
     [categoryPresets],
   );
@@ -482,12 +521,54 @@ function ProductShootScreen({ navigation, route }: Props) {
     return getDetailsSummaryPreview(shootType, brandTitle);
   }, [brandKits, productShootDetails.brandId, shootType]);
 
+  const activeBrandKitName = useMemo(() => {
+    const brandId =
+      productShootDetails.brandId ??
+      brandKits.find(kit => kit.isDefault)?.id;
+    return brandKits.find(kit => kit.id === brandId)?.title;
+  }, [brandKits, productShootDetails.brandId]);
+
+  const generationSteps = useMemo((): GenerationProgressStep[] => {
+    const steps: GenerationProgressStep[] = [];
+
+    if (productShootDetails.useBrandKit !== false && activeBrandKitName) {
+      steps.push({
+        id: 'brand-kit',
+        label: `Brand kit applied · ${activeBrandKitName}`,
+      });
+    }
+
+    steps.push(
+      { id: 'subject', label: 'Subject locked' },
+      { id: 'render', label: 'Rendering variants' },
+      { id: 'copy', label: 'Crafting copy' },
+    );
+
+    return steps;
+  }, [activeBrandKitName, productShootDetails.useBrandKit]);
+
+  useEffect(() => {
+    if (!isGenerating) {
+      return;
+    }
+
+    const unsubscribe = navigation.addListener('beforeRemove', event => {
+      if (!allowLeaveRef.current) {
+        event.preventDefault();
+      }
+    });
+
+    return unsubscribe;
+  }, [isGenerating, navigation]);
+
   const handleGenerate = useCallback(async () => {
     if (isGenerating) {
       return;
     }
 
+    allowLeaveRef.current = false;
     setIsGenerating(true);
+    setGenerationComplete(false);
     try {
       const [product, brandsResponse] = await Promise.all([
         productsApi.getById(productId),
@@ -526,6 +607,12 @@ function ProductShootScreen({ navigation, route }: Props) {
         dispatch(setCreditsBalance(response.credits.balance));
       }
 
+      setGenerationComplete(true);
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 1000);
+      });
+
+      allowLeaveRef.current = true;
       navigation.replace('ShootResults', {
         productName,
         presetName: selectedPreset.name,
@@ -538,8 +625,9 @@ function ProductShootScreen({ navigation, route }: Props) {
         'Generation failed',
         apiError?.message ?? 'Could not start generation. Please try again.',
       );
-    } finally {
       setIsGenerating(false);
+      setGenerationComplete(false);
+      allowLeaveRef.current = false;
     }
   }, [
     customHeight,
@@ -580,11 +668,17 @@ function ProductShootScreen({ navigation, route }: Props) {
         </Pressable>
       </View>
 
-      <ScrollView
-        bounces={false}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardAvoiding}
       >
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}
+        >
         <View style={styles.segmentTrack}>
           {SHOOT_TYPES.map(tab => {
             const isActive = shootType === tab.id;
@@ -648,11 +742,14 @@ function ProductShootScreen({ navigation, route }: Props) {
               ref={styleScrollRef}
               horizontal
               decelerationRate="fast"
-              onMomentumScrollEnd={handleStyleScrollEnd}
+              onMomentumScrollEnd={handleStyleScroll}
+              onScroll={handleStyleScroll}
+              onScrollEndDrag={handleStyleScroll}
               pagingEnabled={false}
+              scrollEventThrottle={16}
               showsHorizontalScrollIndicator={false}
               snapToAlignment="start"
-              snapToInterval={STYLE_CARD_WIDTH + STYLE_CARD_GAP}
+              snapToInterval={STYLE_CARD_SNAP_INTERVAL}
               contentContainerStyle={styles.styleCardsRow}
             >
               {categoryPresets.map(preset => {
@@ -668,12 +765,7 @@ function ProductShootScreen({ navigation, route }: Props) {
                       const index = categoryPresets.findIndex(
                         item => item.id === preset.id,
                       );
-                      setSelectedPresetId(preset.id);
-                      setStyleCardIndex(index >= 0 ? index : 0);
-                      styleScrollRef.current?.scrollTo({
-                        animated: true,
-                        x: Math.max(0, index) * (STYLE_CARD_WIDTH + STYLE_CARD_GAP),
-                      });
+                      selectStylePresetAtIndex(index >= 0 ? index : 0);
                     }}
                     style={[
                       styles.styleCard,
@@ -957,6 +1049,7 @@ function ProductShootScreen({ navigation, route }: Props) {
           <AppIcon color={colors.textSoft} name="chevron-down" size={18} />
         </Pressable>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <ShootDetailsModal
         onClose={() => setDetailsModalVisible(false)}
@@ -976,15 +1069,21 @@ function ProductShootScreen({ navigation, route }: Props) {
       >
         <View style={styles.bottomBar}>
           <View style={[styles.bottomLeft, quantityMenuOpen && styles.bottomLeftOpen]}>
-            <CompactSelectDropdown
-              direction="up"
-              onChange={nextValue => setQuantity(Number(nextValue))}
-              onOpenChange={setQuantityMenuOpen}
-              options={QUANTITY_SELECT_OPTIONS}
-              triggerStyle={styles.quantityButton}
-              value={String(quantity)}
-              valueStyle={styles.quantityText}
-            />
+            <View style={styles.variantTrack}>
+              <View style={styles.variantItem}>
+                <Text style={styles.qualityLabel}>VARIANT</Text>
+                <CompactSelectDropdown
+                  direction="up"
+                  minWidth={40}
+                  onChange={nextValue => setQuantity(Number(nextValue))}
+                  onOpenChange={setQuantityMenuOpen}
+                  options={QUANTITY_SELECT_OPTIONS}
+                  triggerStyle={styles.variantButton}
+                  value={String(quantity)}
+                  valueStyle={styles.variantValue}
+                />
+              </View>
+            </View>
             <Text style={styles.quantityMultiply}>×</Text>
           </View>
 
@@ -1036,10 +1135,12 @@ function ProductShootScreen({ navigation, route }: Props) {
         </View>
       </SafeAreaView>
 
-      <BlockingLoadingOverlay
-        blur
-        blurAmount={3}
-        message="Generating your creatives…"
+      <GenerationProgressOverlay
+        generationComplete={generationComplete}
+        qualityLabel={QUALITY_PROGRESS_LABELS[quality]}
+        quantity={quantity}
+        stepIntervalMs={5000}
+        steps={generationSteps}
         visible={isGenerating}
       />
     </SafeAreaView>
@@ -1083,7 +1184,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
-    marginTop: 12,
+    marginTop: SECTION_TITLE_GAP,
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
@@ -1125,7 +1226,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSoft,
     borderRadius: 16,
     borderWidth: 1,
-    marginTop: 12,
+    marginTop: SECTION_TITLE_GAP,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -1171,7 +1272,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSoft,
     borderRadius: 18,
     borderWidth: 1,
-    marginTop: 22,
+    marginTop: SECTION_SPACING,
     paddingHorizontal: 18,
     paddingVertical: 22,
   },
@@ -1199,7 +1300,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 10,
-    marginTop: 14,
+    marginTop: SECTION_SPACING,
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
@@ -1249,7 +1350,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSoft,
     borderRadius: 14,
     borderWidth: 1,
-    marginTop: 12,
+    marginTop: SECTION_TITLE_GAP,
     paddingHorizontal: 16,
     paddingVertical: 18,
   },
@@ -1364,7 +1465,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 12,
   },
   paginationDot: {
     backgroundColor: colors.border,
@@ -1383,7 +1483,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     justifyContent: 'center',
-    marginTop: 12,
+    marginTop: SECTION_TITLE_GAP,
   },
   qualityCredits: {
     color: colors.textSoft,
@@ -1421,31 +1521,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 3,
   },
-  quantityButton: {
-    gap: 2,
-    minWidth: 44,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-  },
   quantityMultiply: {
     color: colors.textSoft,
     fontSize: 14,
     marginLeft: 6,
   },
-  quantityText: {
-    color: colors.text,
-    fontSize: 14,
+  variantButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    gap: 1,
+    minWidth: 36,
+    paddingHorizontal: 2,
+    paddingVertical: 0,
+  },
+  variantItem: {
+    alignItems: 'center',
+    borderRadius: 10,
+    minWidth: 52,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  variantTrack: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderSoft,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 3,
+  },
+  variantValue: {
+    color: colors.textMuted,
+    fontSize: 9,
     fontWeight: '700',
   },
   safeArea: {
     backgroundColor: colors.background,
     flex: 1,
   },
+  keyboardAvoiding: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
   sectionHeader: {
     alignItems: 'baseline',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 22,
+    marginBottom: SECTION_TITLE_GAP,
+    marginTop: SECTION_SPACING,
   },
   sectionMeta: {
     color: colors.text,
@@ -1536,7 +1659,7 @@ const styles = StyleSheet.create({
   },
   sizeRow: {
     gap: 10,
-    marginTop: 12,
+    marginTop: SECTION_TITLE_GAP,
     paddingRight: 4,
   },
   styleCard: {
@@ -1630,7 +1753,7 @@ const styles = StyleSheet.create({
   },
   styleCardsRow: {
     gap: STYLE_CARD_GAP,
-    marginTop: 14,
+    marginTop: SECTION_TITLE_GAP,
     paddingRight: 4,
   },
   styleTab: {
@@ -1654,7 +1777,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   styleTabsRow: {
-    marginTop: 12,
     paddingRight: 8,
   },
 });

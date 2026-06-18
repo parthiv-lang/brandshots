@@ -4,6 +4,8 @@ import { colors } from '../theme/colors';
 
 type AddBrandKitCardProps = {
   onCreateFromUrl?: () => void;
+  onCreateManually?: () => void;
+  variant?: 'first' | 'another';
 };
 
 function PaletteIcon() {
@@ -16,14 +18,22 @@ function PaletteIcon() {
   );
 }
 
-function AddBrandKitCard({ onCreateFromUrl }: AddBrandKitCardProps) {
+function AddBrandKitCard({
+  onCreateFromUrl,
+  onCreateManually,
+  variant = 'another',
+}: AddBrandKitCardProps) {
+  const isFirst = variant === 'first';
+
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isFirst && styles.cardFirst]}>
       <View style={styles.iconWrap}>
         <PaletteIcon />
       </View>
 
-      <Text style={styles.title}>Add another kit</Text>
+      <Text style={styles.title}>
+        {isFirst ? 'Add your first kit' : 'Add another kit'}
+      </Text>
       <Text style={styles.description}>
         Paste a website — we&apos;ll pull colors, logo, voice.
       </Text>
@@ -33,9 +43,18 @@ function AddBrandKitCard({ onCreateFromUrl }: AddBrandKitCardProps) {
         onPress={onCreateFromUrl}
         style={styles.button}
       >
-        {/* <Icon color={colors.white} name="link" size={15} style={styles.buttonIcon} /> */}
         <Text style={styles.buttonText}>Create from URL</Text>
       </TouchableOpacity>
+
+      {isFirst && onCreateManually ? (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={onCreateManually}
+          style={styles.manualButton}
+        >
+          <Text style={styles.manualButtonText}>Create manually</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -59,6 +78,16 @@ const styles = StyleSheet.create({
   buttonIcon: {
     marginRight: 8,
   },
+  manualButton: {
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  manualButtonText: {
+    color: colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   buttonText: {
     color: colors.white,
     fontSize: 15,
@@ -74,6 +103,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 22,
     paddingVertical: 28,
+  },
+  cardFirst: {
+    marginTop: 0,
+    width: '100%',
   },
   description: {
     color: colors.textMuted,

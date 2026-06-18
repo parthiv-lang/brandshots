@@ -2,7 +2,9 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -32,6 +34,7 @@ function BrandKitsScreen() {
   const [isLoading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isScrapeModalVisible, setScrapeModalVisible] = useState(false);
+  const [isNewKitModalVisible, setNewKitModalVisible] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState('');
   const [isScraping, setScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState<string | null>(null);
@@ -63,10 +66,16 @@ function BrandKitsScreen() {
   );
 
   const handleNewKit = () => {
+    setNewKitModalVisible(true);
+  };
+
+  const handleCreateManually = () => {
+    setNewKitModalVisible(false);
     navigation.navigate('BrandDetails');
   };
 
   const handleCreateFromUrl = () => {
+    setNewKitModalVisible(false);
     setScrapeError(null);
     setScrapeModalVisible(true);
   };
@@ -105,6 +114,7 @@ function BrandKitsScreen() {
   };
 
   const hasDefaultBrand = items.some(item => item.isDefault);
+  const hasBrandKits = items.length > 0;
 
   const handleClearDefault = async () => {
     if (!hasDefaultBrand || isClearingDefault) {
@@ -190,13 +200,17 @@ function BrandKitsScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={handleNewKit}
-          style={styles.newButton}
-        >
-          <Text style={styles.newButtonText}>+ NEW</Text>
-        </TouchableOpacity>
+        {hasBrandKits ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleNewKit}
+            style={styles.newButton}
+          >
+            <Text style={styles.newButtonText}>+ NEW</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.newButtonPlaceholder} />
+        )}
       </View>
       {hasDefaultBrand ? (
         <TouchableOpacity
@@ -224,6 +238,14 @@ function BrandKitsScreen() {
           <TouchableOpacity onPress={() => void fetchBrandKits()} style={styles.retryButton}>
             <Text style={styles.retryText}>Try again</Text>
           </TouchableOpacity>
+        </View>
+      ) : !hasBrandKits ? (
+        <View style={styles.emptyState}>
+          <AddBrandKitCard
+            onCreateFromUrl={handleCreateFromUrl}
+            onCreateManually={handleCreateManually}
+            variant="first"
+          />
         </View>
       ) : (
         <ScrollView
@@ -255,10 +277,48 @@ function BrandKitsScreen() {
               }
             />
           ))}
-
-          <AddBrandKitCard onCreateFromUrl={handleCreateFromUrl} />
         </ScrollView>
       )}
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setNewKitModalVisible(false)}
+        transparent
+        visible={isNewKitModalVisible}
+      >
+        <View style={styles.choiceBackdrop}>
+          <View style={styles.choiceCard}>
+            <Text style={styles.choiceTitle}>New brand kit</Text>
+            <Text style={styles.choiceSubtitle}>
+              Import from a website or set one up yourself.
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={handleCreateFromUrl}
+              style={styles.choicePrimaryButton}
+            >
+              <Text style={styles.choicePrimaryText}>Create from URL</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleCreateManually}
+              style={styles.choiceSecondaryButton}
+            >
+              <Text style={styles.choiceSecondaryText}>Create manually</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setNewKitModalVisible(false)}
+              style={styles.choiceCancelButton}
+            >
+              <Text style={styles.choiceCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         animationType="fade"
@@ -266,7 +326,10 @@ function BrandKitsScreen() {
         transparent
         visible={isScrapeModalVisible}
       >
-        <View style={styles.scrapeBackdrop}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.scrapeBackdrop}
+        >
           <View style={styles.scrapeCard}>
             <Text style={styles.scrapeTitle}>Create from URL</Text>
             <TextInput
@@ -311,7 +374,7 @@ function BrandKitsScreen() {
               <Text style={styles.scrapeErrorText}>{scrapeError}</Text>
             ) : null}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -323,6 +386,78 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  choiceBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(25, 18, 14, 0.45)',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  choiceCancelButton: {
+    alignItems: 'center',
+    marginTop: 10,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  choiceCancelText: {
+    color: colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  choiceCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    maxWidth: 420,
+    padding: 16,
+    width: '100%',
+  },
+  choicePrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    justifyContent: 'center',
+    marginTop: 16,
+    minHeight: 46,
+  },
+  choicePrimaryText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  choiceSecondaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 10,
+    minHeight: 46,
+  },
+  choiceSecondaryText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  choiceSubtitle: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  choiceTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: 32,
   },
   errorText: {
     color: colors.textMuted,
@@ -364,6 +499,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.6,
+  },
+  newButtonPlaceholder: {
+    marginTop: 18,
+    minWidth: 84,
   },
   clearDefaultButton: {
     alignItems: 'center',

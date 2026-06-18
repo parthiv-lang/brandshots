@@ -17,6 +17,10 @@ import {
   saveToken,
 } from '../../services/storage/tokenStorage';
 import { removeMe, saveMe } from '../../services/storage/userStorage';
+import {
+  identifyRevenueCatUser,
+  logoutRevenueCatUser,
+} from '../../services/purchases/revenueCat';
 
 export type AuthStatus = 'idle' | 'bootstrapping' | 'authenticating' | 'ready';
 
@@ -54,6 +58,7 @@ export const bootstrapAuth = createAsyncThunk<
 
     const response = await authApi.me();
     await saveMe(response);
+    await identifyRevenueCatUser(response.user.id);
 
     return {
       accessToken: token,
@@ -80,6 +85,7 @@ export const loginWithGoogleThunk = createAsyncThunk<
 
     await saveToken(response.accessToken);
     await saveMe({ user: response.user, credits: response.credits });
+    await identifyRevenueCatUser(response.user.id);
 
     return {
       accessToken: response.accessToken,
@@ -113,6 +119,7 @@ export const loginWithAppleThunk = createAsyncThunk<
 
     await saveToken(response.accessToken);
     await saveMe({ user: response.user, credits: response.credits });
+    await identifyRevenueCatUser(response.user.id);
 
     return {
       accessToken: response.accessToken,
@@ -152,6 +159,7 @@ export const logoutThunk = createAsyncThunk<void, void>(
   'auth/logout',
   async () => {
     await signOutFromGoogle();
+    await logoutRevenueCatUser();
     await removeToken();
     await removeMe();
   },
