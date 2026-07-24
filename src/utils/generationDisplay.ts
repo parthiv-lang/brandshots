@@ -3,11 +3,54 @@ import type {
   BatchGeneration,
   GenerationCopy,
   PublicGeneration,
+  RefineGenerationResponse,
 } from '../services/generations/types';
 
 function toNullableString(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed || null;
+}
+
+export function refineResponseToBatchGeneration(
+  generation: RefineGenerationResponse,
+): BatchGeneration {
+  return {
+    id: generation.id,
+    createdAt: generation.createdAt,
+    imageUrl: generation.imageUrl,
+    imageSize: generation.imageSize,
+    aspectRatio: generation.aspectRatio,
+    width: generation.width,
+    height: generation.height,
+    mode: generation.mode,
+    platformId: toNullableString(generation.platformId),
+    platformLabel: toNullableString(generation.platformLabel),
+    platform: toNullableString(generation.platform),
+    nicheId: toNullableString(generation.nicheId),
+    nicheLabel: toNullableString(generation.nicheLabel),
+    vibeId: toNullableString(generation.vibeId),
+    vibeLabel: toNullableString(generation.vibeLabel),
+    brandTitle: toNullableString(generation.brandTitle),
+    brandDescription: toNullableString(generation.brandDescription),
+    brandWebsite: toNullableString(generation.brandWebsite),
+    headline: toNullableString(generation.headline),
+    cta: toNullableString(generation.cta),
+    categoryId: generation.categoryId,
+    categoryLabel: generation.categoryLabel,
+    lookId: generation.lookId,
+    lookLabel: generation.lookLabel,
+    treatmentId: generation.treatmentId,
+    treatmentLabel: generation.treatmentLabel,
+    audience: generation.audience,
+    offer: generation.offer,
+    copy: generation.copy,
+    productId: generation.productId,
+    parentGenerationId: generation.parentGenerationId,
+    refineFeedback: generation.refineFeedback,
+    creditsUsed: generation.creditsUsed,
+    prompt: generation.prompt,
+    favorite: generation.favorite,
+  };
 }
 
 export function publicGenerationToBatchGeneration(

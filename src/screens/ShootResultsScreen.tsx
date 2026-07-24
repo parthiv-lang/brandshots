@@ -1,14 +1,16 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -28,7 +30,9 @@ import type {
   BatchGeneration,
   BatchResultItem,
   GenerationCopy,
+  RefineImageQuality,
 } from '../services/generations/types';
+import { generationsApi } from '../services/generations';
 import { colors } from '../theme/colors';
 import type { RootStackParamList } from '../navigation/types';
 import { downloadImageToGallery } from '../utils/downloadImage';
@@ -37,6 +41,7 @@ import {
   formatGenerationMode,
   getGenerationCopyFields,
   getGenerationStyleBadge,
+  refineResponseToBatchGeneration,
   type CopyField,
 } from '../utils/generationDisplay';
 
@@ -44,14 +49,91 @@ const electricityIcon = require('../assets/electricity-svgrepo-com.png');
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 20;
-const IMAGE_HORIZONTAL_INSET = 18;
+const IMAGE_HORIZONTAL_INSET = 14;
 const IMAGE_MAX_WIDTH = SCREEN_WIDTH - IMAGE_HORIZONTAL_INSET * 2;
-const IMAGE_MAX_HEIGHT = SCREEN_HEIGHT * 0.64;
+const CAROUSEL_PEEK_WIDTH = 44;
+const CAROUSEL_ITEM_GAP = 12;
+const CAROUSEL_INACTIVE_OPACITY = 0.38;
 const DEFAULT_AMBIENT_COLOR = '#1A1410';
+const SERIF_FONT = Platform.select({ ios: 'Georgia', android: 'serif' });
+const SHEET_TOP_OFFSET = 56;
+const SHEET_COLLAPSED_HEIGHT = 252;
+const IMAGE_MAX_HEIGHT = Math.min(
+  SCREEN_HEIGHT * 0.46,
+  SCREEN_HEIGHT - SHEET_COLLAPSED_HEIGHT - 100,
+);
+
+const REFINE_SUGGESTIONS = [
+  'Warmer lighting',
+  'Cleaner background',
+  'More vibrant colors',
+  'Softer shadows',
+  'Closer crop on product',
+  'Remove text overlay',
+] as const;
+
+const REFINE_QUALITY_OPTIONS: Array<{
+  id: RefineImageQuality;
+  label: string;
+  credits: number;
+}> = [
+  { id: 'low', label: 'Fast', credits: 1 },
+  { id: 'medium', label: 'Balanced', credits: 2 },
+  { id: 'high', label: 'Refined', credits: 4 },
+];
+
+type SheetSnapPoints = {
+  collapsedOffset: number;
+  expandedOffset: number;
+  maxHeight: number;
+};
+
+function getSheetSnapPoints(bottomInset: number): SheetSnapPoints {
+  const maxHeight = SCREEN_HEIGHT - SHEET_TOP_OFFSET;
+  const collapsedHeight = SHEET_COLLAPSED_HEIGHT + bottomInset;
+
+  return {
+    collapsedOffset: maxHeight - collapsedHeight,
+    expandedOffset: 0,
+    maxHeight,
+  };
+}
+
+type CarouselLayout = {
+  contentPadding: number;
+  imageMaxWidth: number;
+  itemWidth: number;
+  snapInterval: number;
+  usePeek: boolean;
+};
+
+function getCarouselLayout(variantCount: number): CarouselLayout {
+  if (variantCount <= 1) {
+    return {
+      contentPadding: 0,
+      imageMaxWidth: IMAGE_MAX_WIDTH,
+      itemWidth: SCREEN_WIDTH,
+      snapInterval: SCREEN_WIDTH,
+      usePeek: false,
+    };
+  }
+
+  const imageMaxWidth =
+    SCREEN_WIDTH - CAROUSEL_PEEK_WIDTH * 2 - CAROUSEL_ITEM_GAP;
+  const itemWidth = imageMaxWidth + CAROUSEL_ITEM_GAP;
+
+  return {
+    contentPadding: CAROUSEL_PEEK_WIDTH,
+    imageMaxWidth,
+    itemWidth,
+    snapInterval: itemWidth,
+    usePeek: true,
+  };
+}
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShootResults'>;
 
-type InfoSheetMode = 'menu' | 'copy' | 'details' | 'failed';
+type InfoSheetMode = 'menu' | 'details' | 'failed';
 
 type DetailRow = {
   id: string;
@@ -375,7 +457,6 @@ function DetailRowCard({ row }: DetailRowCardProps) {
 
 type ResultsInfoSheetProps = {
   activeIndex: number;
-  batchCopy?: GenerationCopy | null;
   failedResults: BatchResultItem[];
   generation: BatchGeneration;
   mode: InfoSheetMode;
@@ -387,7 +468,6 @@ type ResultsInfoSheetProps = {
 
 function ResultsInfoSheet({
   activeIndex,
-  batchCopy,
   failedResults,
   generation,
   mode,
@@ -397,10 +477,6 @@ function ResultsInfoSheet({
   visible,
 }: ResultsInfoSheetProps) {
   const insets = useSafeAreaInsets();
-  const copyFields = useMemo(
-    () => getGenerationCopyFields(generation, batchCopy),
-    [batchCopy, generation],
-  );
   const detailRows = useMemo(
     () => buildDetailRows(generation, activeIndex, totalCount),
     [activeIndex, generation, totalCount],
@@ -409,30 +485,16 @@ function ResultsInfoSheet({
   const sheetTitle =
     mode === 'menu'
       ? 'More options'
-      : mode === 'copy'
-        ? 'Copy & messaging'
-        : mode === 'details'
-          ? 'Shoot details'
-          : 'Failed variants';
+      : mode === 'details'
+        ? 'Shoot details'
+        : 'Failed variants';
 
   const sheetSubtitle =
     mode === 'menu'
       ? 'Everything about this result in one place'
-      : mode === 'copy'
-        ? 'Tap copy on any field to paste into your post or ad'
-        : mode === 'details'
-          ? 'How this creative was generated'
-          : `${failedResults.length} variant${failedResults.length === 1 ? '' : 's'} could not be created`;
-
-  const handleCopyAll = useCallback(() => {
-    if (copyFields.length === 0) {
-      return;
-    }
-
-    Clipboard.setString(
-      copyFields.map(field => `${field.label}: ${field.value}`).join('\n\n'),
-    );
-  }, [copyFields]);
+      : mode === 'details'
+        ? 'How this creative was generated'
+        : `${failedResults.length} variant${failedResults.length === 1 ? '' : 's'} could not be created`;
 
   return (
     <Modal
@@ -484,12 +546,6 @@ function ResultsInfoSheet({
             {mode === 'menu' ? (
               <View style={styles.menuOptionsWrap}>
                 <MenuOption
-                  description="Headlines, captions, CTAs & hashtags"
-                  icon="type"
-                  onPress={() => onModeChange('copy')}
-                  title="Copy & messaging"
-                />
-                <MenuOption
                   description="Style, format, size & credits"
                   icon="info"
                   onPress={() => onModeChange('details')}
@@ -504,28 +560,6 @@ function ResultsInfoSheet({
                   />
                 ) : null}
               </View>
-            ) : null}
-
-            {mode === 'copy' ? (
-              copyFields.length > 0 ? (
-                <>
-                  <Pressable onPress={handleCopyAll} style={styles.copyAllButton}>
-                    <AppIcon color={colors.white} name="copy" size={16} />
-                    <Text style={styles.copyAllButtonText}>Copy all fields</Text>
-                  </Pressable>
-                  {copyFields.map(field => (
-                    <CopyFieldCard field={field} key={field.id} />
-                  ))}
-                </>
-              ) : (
-                <View style={styles.sheetEmptyCard}>
-                  <AppIcon color="rgba(255,255,255,0.45)" name="type" size={28} />
-                  <Text style={styles.sheetEmptyTitle}>No copy generated</Text>
-                  <Text style={styles.sheetEmptyBody}>
-                    This shoot did not include headlines, captions, or other text.
-                  </Text>
-                </View>
-              )
             ) : null}
 
             {mode === 'details' ? (
@@ -563,20 +597,136 @@ function ResultsInfoSheet({
   );
 }
 
-type BottomActionBarProps = {
+type ResultsBottomSheetProps = {
+  activeIndex: number;
+  batchCopy?: GenerationCopy | null;
+  bottomInset: number;
+  collapseToken: number;
+  generation: BatchGeneration;
+  imageQuality: RefineImageQuality;
   imageUrl: string;
-  refineText: string;
+  isRefining: boolean;
+  onImageQualityChange: (quality: RefineImageQuality) => void;
   onRefineChange: (value: string) => void;
   onRefineSubmit: () => void;
+  productName: string;
+  refineText: string;
+  totalCount: number;
 };
 
-function BottomActionBar({
+function ResultsBottomSheet({
+  activeIndex,
+  batchCopy,
+  bottomInset,
+  collapseToken,
+  generation,
+  imageQuality,
   imageUrl,
-  refineText,
+  isRefining,
+  onImageQualityChange,
   onRefineChange,
   onRefineSubmit,
-}: BottomActionBarProps) {
+  productName,
+  refineText,
+  totalCount,
+}: ResultsBottomSheetProps) {
+  const copyFields = useMemo(
+    () => getGenerationCopyFields(generation, batchCopy),
+    [batchCopy, generation],
+  );
+  const styleBadge = getGenerationStyleBadge(generation);
+  const aspectLabel = formatAspectRatioLabel(generation.aspectRatio);
+  const metaParts = [
+    styleBadge,
+    aspectLabel,
+    `${activeIndex + 1} / ${totalCount}`,
+  ].filter(Boolean);
+
+  const snapPoints = useMemo(
+    () => getSheetSnapPoints(bottomInset),
+    [bottomInset],
+  );
+  const snapPointsRef = useRef(snapPoints);
+  snapPointsRef.current = snapPoints;
+
+  const translateY = useRef(
+    new Animated.Value(getSheetSnapPoints(bottomInset).collapsedOffset),
+  ).current;
+  const dragStartY = useRef(snapPoints.collapsedOffset);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [refineFocused, setRefineFocused] = useState(false);
+
+  const snapTo = useCallback(
+    (expanded: boolean) => {
+      const points = snapPointsRef.current;
+      const toValue = expanded ? points.expandedOffset : points.collapsedOffset;
+
+      Animated.spring(translateY, {
+        damping: 24,
+        stiffness: 220,
+        toValue,
+        useNativeDriver: true,
+      }).start();
+      dragStartY.current = toValue;
+      setIsExpanded(expanded);
+    },
+    [translateY],
+  );
+
+  const expandSheet = useCallback(() => {
+    snapTo(true);
+  }, [snapTo]);
+
+  const collapseSheet = useCallback(() => {
+    Keyboard.dismiss();
+    snapTo(false);
+    setRefineFocused(false);
+  }, [snapTo]);
+
+  useEffect(() => {
+    if (collapseToken > 0) {
+      collapseSheet();
+    }
+  }, [collapseToken, collapseSheet]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 6,
+      onPanResponderGrant: () => {
+        translateY.stopAnimation(value => {
+          dragStartY.current = value;
+        });
+      },
+      onPanResponderMove: (_, gesture) => {
+        const points = snapPointsRef.current;
+        const nextY = Math.min(
+          points.collapsedOffset,
+          Math.max(points.expandedOffset, dragStartY.current + gesture.dy),
+        );
+        translateY.setValue(nextY);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const points = snapPointsRef.current;
+        const currentY = dragStartY.current + gesture.dy;
+        const midPoint = points.collapsedOffset * 0.45;
+        const shouldExpand = gesture.vy < -0.35 || currentY < midPoint;
+        const toValue = shouldExpand
+          ? points.expandedOffset
+          : points.collapsedOffset;
+
+        Animated.spring(translateY, {
+          damping: 24,
+          stiffness: 220,
+          toValue,
+          useNativeDriver: true,
+        }).start();
+        dragStartY.current = toValue;
+        setIsExpanded(shouldExpand);
+      },
+      onStartShouldSetPanResponder: () => true,
+    }),
+  ).current;
 
   const handleDownload = useCallback(async () => {
     if (isDownloading) {
@@ -595,67 +745,256 @@ function BottomActionBar({
     await shareRemoteImage(imageUrl);
   }, [imageUrl]);
 
+  const handleRefineFocus = useCallback(() => {
+    setRefineFocused(true);
+    expandSheet();
+  }, [expandSheet]);
+
+  const handleSuggestionPress = useCallback(
+    (suggestion: string) => {
+      onRefineChange(suggestion);
+    },
+    [onRefineChange],
+  );
+
+  const canSubmitRefine = refineText.trim().length > 0 && !isRefining;
+
+  const handleCopyAllFormatted = useCallback(() => {
+    if (copyFields.length === 0) {
+      return;
+    }
+
+    Clipboard.setString(
+      copyFields
+        .map(field => `${field.label.toUpperCase()}\n${field.value}`)
+        .join('\n\n'),
+    );
+  }, [copyFields]);
+
   return (
-    <View style={styles.bottomBar}>
-      <Pressable
-        disabled={isDownloading}
-        hitSlop={8}
-        onPress={() => void handleDownload()}
-        style={styles.bottomSideButton}
+    <Animated.View
+      style={[
+        styles.resultsBottomSheet,
+        {
+          height: snapPoints.maxHeight,
+          paddingBottom: bottomInset,
+          transform: [{ translateY }],
+        },
+      ]}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.sheetKeyboardAvoid}
       >
-        {isDownloading ? (
-          <ActivityIndicator color={colors.white} size="small" />
-        ) : (
-          <AppIcon color={colors.white} name="bookmark" size={18} />
-        )}
-      </Pressable>
-
-      <View style={styles.refineFieldWrap}>
-        <Image
-          resizeMode="contain"
-          source={electricityIcon}
-          style={styles.refineBoltIcon}
-        />
-        <TextInput
-          blurOnSubmit
-          multiline={false}
-          onChangeText={onRefineChange}
-          onSubmitEditing={onRefineSubmit}
-          placeholder='Refine — "warmer light..."'
-          placeholderTextColor="rgba(255, 255, 255, 0.42)"
-          returnKeyType="send"
-          style={styles.refineInput}
-          value={refineText}
-        />
-        <View style={styles.refineCreditBadge}>
-          <Text style={styles.refineCreditText}>1 credit used</Text>
+        <View {...panResponder.panHandlers} style={styles.sheetDragZone}>
+          <View style={styles.bottomSheetHandle} />
+          <Text numberOfLines={2} style={styles.productTitle}>
+            {productName}
+          </Text>
+          <Text style={styles.productMeta}>{metaParts.join(' · ')}</Text>
         </View>
-      </View>
 
-      <Pressable
-        hitSlop={8}
-        onPress={() => void handleShare()}
-        style={styles.bottomShareButton}
-      >
-        <AppIcon color={colors.white} name="upload" size={18} />
-      </Pressable>
-    </View>
+        <View style={styles.sheetFixedActions}>
+          <View style={styles.refineBar}>
+            <Image
+              resizeMode="contain"
+              source={electricityIcon}
+              style={styles.refineBarBolt}
+            />
+            <TextInput
+              blurOnSubmit
+              editable={!isRefining}
+              multiline={false}
+              onChangeText={onRefineChange}
+              onFocus={handleRefineFocus}
+              onSubmitEditing={onRefineSubmit}
+              placeholder="warmer light, less background..."
+              placeholderTextColor="rgba(255, 255, 255, 0.72)"
+              returnKeyType="send"
+              style={styles.refineBarInput}
+              value={refineText}
+            />
+            <Pressable
+              disabled={!canSubmitRefine}
+              hitSlop={8}
+              onPress={onRefineSubmit}
+              style={[
+                styles.refineBarSubmit,
+                !canSubmitRefine && styles.refineBarSubmitDisabled,
+              ]}
+            >
+              {isRefining ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <AppIcon color={colors.primary} name="arrow-up" size={18} />
+              )}
+            </Pressable>
+          </View>
+
+          {refineFocused ? (
+            <View style={styles.refinePanel}>
+              <View style={styles.refineSuggestions}>
+                {REFINE_SUGGESTIONS.map(suggestion => {
+                  const isSelected = refineText.trim() === suggestion;
+                  return (
+                    <Pressable
+                      key={suggestion}
+                      onPress={() => handleSuggestionPress(suggestion)}
+                      style={[
+                        styles.refineChip,
+                        isSelected && styles.refineChipSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.refineChipText,
+                          isSelected && styles.refineChipTextSelected,
+                        ]}
+                      >
+                        {suggestion}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.qualityHeader}>
+                <Text style={styles.qualityLabel}>QUALITY</Text>
+                <Text style={styles.qualityHint}>Default · cheapest</Text>
+              </View>
+
+              <View style={styles.qualityRow}>
+                {REFINE_QUALITY_OPTIONS.map(option => {
+                  const isSelected = imageQuality === option.id;
+                  return (
+                    <Pressable
+                      key={option.id}
+                      onPress={() => onImageQualityChange(option.id)}
+                      style={[
+                        styles.qualityOption,
+                        isSelected && styles.qualityOptionSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.qualityOptionLabel,
+                          isSelected && styles.qualityOptionLabelSelected,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.qualityOptionCredits,
+                          isSelected && styles.qualityOptionCreditsSelected,
+                        ]}
+                      >
+                        {option.credits}cr
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          <View style={styles.actionRow}>
+            <Pressable
+              disabled={isDownloading}
+              onPress={() => void handleDownload()}
+              style={styles.actionButton}
+            >
+              {isDownloading ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <AppIcon color={colors.white} name="download" size={18} />
+              )}
+              <Text style={styles.actionButtonText}>Download</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => void handleShare()}
+              style={styles.actionButton}
+            >
+              <AppIcon color={colors.white} name="share-2" size={18} />
+              <Text style={styles.actionButtonText}>Share</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {isExpanded ? (
+          <ScrollView
+            bounces
+            contentContainerStyle={styles.sheetScrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={styles.sheetScroll}
+          >
+            {copyFields.length > 0 ? (
+              <>
+                <View style={styles.copyKitHeader}>
+                  <Text style={styles.copyKitTitle}>Copy kit</Text>
+                  <Text style={styles.copyKitHint}>TAP ANY TO COPY</Text>
+                </View>
+                {copyFields.map(field => (
+                  <CopyFieldCard field={field} key={field.id} />
+                ))}
+                <Pressable
+                  onPress={handleCopyAllFormatted}
+                  style={styles.copyAllFormattedButton}
+                >
+                  <AppIcon color={colors.white} name="copy" size={16} />
+                  <Text style={styles.copyAllFormattedText}>
+                    COPY ALL FORMATTED
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <View style={styles.sheetEmptyCard}>
+                <AppIcon color="rgba(255,255,255,0.45)" name="type" size={28} />
+                <Text style={styles.sheetEmptyTitle}>No copy generated</Text>
+                <Text style={styles.sheetEmptyBody}>
+                  This shoot did not include headlines, captions, or other text.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        ) : copyFields.length > 0 ? (
+          <Pressable onPress={expandSheet} style={styles.copyKitTeaser}>
+            <AppIcon
+              color="rgba(255, 255, 255, 0.55)"
+              name="chevron-up"
+              size={16}
+            />
+            <Text style={styles.copyKitTeaserText}>Copy kit</Text>
+            <View style={styles.copyKitBadge}>
+              <Text style={styles.copyKitBadgeText}>{copyFields.length}</Text>
+            </View>
+          </Pressable>
+        ) : null}
+      </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 
 function ShootResultsScreen({ navigation, route }: Props) {
-  const { response } = route.params;
+  const { productName, response } = route.params;
+  const insets = useSafeAreaInsets();
+  const [results, setResults] = useState(response.results);
   const successfulResults = useMemo(
-    () => getSuccessfulResults(response.results),
-    [response.results],
+    () => getSuccessfulResults(results),
+    [results],
   );
   const failedResults = useMemo(
-    () => response.results.filter(item => !item.ok),
-    [response.results],
+    () => results.filter(item => !item.ok),
+    [results],
   );
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [refineText, setRefineText] = useState('');
+  const [refineQuality, setRefineQuality] = useState<RefineImageQuality>('low');
+  const [isRefining, setIsRefining] = useState(false);
+  const [sheetCollapseToken, setSheetCollapseToken] = useState(0);
   const [infoSheetVisible, setInfoSheetVisible] = useState(false);
   const [infoSheetMode, setInfoSheetMode] = useState<InfoSheetMode>('menu');
   const carouselRef = useRef<ScrollView>(null);
@@ -665,6 +1004,17 @@ function ShootResultsScreen({ navigation, route }: Props) {
     successfulResults[selectedIndex] ?? successfulResults[0] ?? null;
   const activeGeneration = activeResult?.generation ?? null;
   const variantCount = successfulResults.length;
+  const carouselLayout = useMemo(
+    () => getCarouselLayout(variantCount),
+    [variantCount],
+  );
+  const carouselSnapOffsets = useMemo(
+    () =>
+      carouselLayout.usePeek
+        ? successfulResults.map((_, index) => index * carouselLayout.snapInterval)
+        : undefined,
+    [carouselLayout.snapInterval, carouselLayout.usePeek, successfulResults],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -710,7 +1060,7 @@ function ShootResultsScreen({ navigation, route }: Props) {
   const handleCarouselScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const nextIndex = Math.round(
-        event.nativeEvent.contentOffset.x / SCREEN_WIDTH,
+        event.nativeEvent.contentOffset.x / carouselLayout.snapInterval,
       );
       const clampedIndex = Math.max(0, Math.min(nextIndex, variantCount - 1));
 
@@ -725,7 +1075,13 @@ function ShootResultsScreen({ navigation, route }: Props) {
         updateAmbientForImage(nextImageUrl);
       }
     },
-    [selectedIndex, successfulResults, updateAmbientForImage, variantCount],
+    [
+      carouselLayout.snapInterval,
+      selectedIndex,
+      successfulResults,
+      updateAmbientForImage,
+      variantCount,
+    ],
   );
 
   const handleDone = useCallback(() => {
@@ -754,18 +1110,56 @@ function ShootResultsScreen({ navigation, route }: Props) {
     setInfoSheetMode('menu');
   }, []);
 
-  const handleRefineSubmit = useCallback(() => {
-    const trimmed = refineText.trim();
-    if (!trimmed) {
+  const handleRefineSubmit = useCallback(async () => {
+    const feedback = refineText.trim();
+    if (!feedback || !activeGeneration || isRefining) {
       return;
     }
 
-    Alert.alert(
-      'Refine image',
-      'Image refinement uses 1 credit and will be available in a future update.',
-      [{ text: 'OK' }],
-    );
-  }, [refineText]);
+    setIsRefining(true);
+    try {
+      const refined = await generationsApi.refine(activeGeneration.id, {
+        feedback,
+        imageQuality: refineQuality,
+      });
+      const batchGeneration = refineResponseToBatchGeneration(refined);
+      const newResult: BatchResultItem = {
+        ok: true,
+        variantIndex: successfulResults.length,
+        generation: batchGeneration,
+      };
+
+      setResults(current => [...current, newResult]);
+      const newIndex = successfulResults.length;
+      setSelectedIndex(newIndex);
+      setRefineText('');
+      setSheetCollapseToken(token => token + 1);
+      updateAmbientForImage(refined.imageUrl);
+
+      const layout = getCarouselLayout(successfulResults.length + 1);
+      requestAnimationFrame(() => {
+        carouselRef.current?.scrollTo({
+          animated: true,
+          x: newIndex * layout.snapInterval,
+        });
+      });
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : 'Could not refine this image. Please try again.';
+      Alert.alert('Refine failed', message);
+    } finally {
+      setIsRefining(false);
+    }
+  }, [
+    activeGeneration,
+    isRefining,
+    refineQuality,
+    refineText,
+    successfulResults.length,
+    updateAmbientForImage,
+  ]);
 
   if (!activeGeneration) {
     return (
@@ -816,11 +1210,8 @@ function ShootResultsScreen({ navigation, route }: Props) {
         />
       </Animated.View>
 
-      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.flex}
-        >
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <View style={styles.flex}>
           <ResultsHeader
             activeIndex={selectedIndex}
             generation={activeGeneration}
@@ -829,40 +1220,61 @@ function ShootResultsScreen({ navigation, route }: Props) {
             totalCount={variantCount}
           />
 
-          <View style={styles.carouselSection}>
+          <View
+            style={[
+              styles.carouselSection,
+              { paddingBottom: SHEET_COLLAPSED_HEIGHT + insets.bottom },
+            ]}
+          >
             <ScrollView
               ref={carouselRef}
               horizontal
               bounces={variantCount > 1}
+              contentContainerStyle={
+                carouselLayout.usePeek
+                  ? { paddingHorizontal: carouselLayout.contentPadding }
+                  : undefined
+              }
               decelerationRate="fast"
               disableIntervalMomentum
               onMomentumScrollEnd={handleCarouselScrollEnd}
-              pagingEnabled={variantCount > 1}
+              pagingEnabled={false}
               scrollEnabled={variantCount > 1}
               showsHorizontalScrollIndicator={false}
-              snapToAlignment="center"
-              snapToInterval={SCREEN_WIDTH}
+              snapToAlignment="start"
+              snapToOffsets={carouselSnapOffsets}
               style={styles.carouselScroll}
             >
-              {successfulResults.map(result => {
+              {successfulResults.map((result, index) => {
                 const generation = result.generation!;
                 const frame = getImageDimensions(
                   generation.aspectRatio,
-                  IMAGE_MAX_WIDTH,
+                  carouselLayout.imageMaxWidth,
                   IMAGE_MAX_HEIGHT,
                   generation.width,
                   generation.height,
                 );
+                const isActive = index === selectedIndex;
 
                 return (
                   <View
                     key={generation.id}
-                    style={[styles.carouselPage, { width: SCREEN_WIDTH }]}
+                    style={[
+                      styles.carouselPage,
+                      { width: carouselLayout.itemWidth },
+                    ]}
                   >
                     <View
                       style={[
                         styles.imageFrame,
-                        { height: frame.height, width: frame.width },
+                        {
+                          height: frame.height,
+                          width: frame.width,
+                          opacity:
+                            carouselLayout.usePeek && !isActive
+                              ? CAROUSEL_INACTIVE_OPACITY
+                              : 1,
+                        },
                       ]}
                     >
                       <Image
@@ -878,21 +1290,28 @@ function ShootResultsScreen({ navigation, route }: Props) {
 
             <PageIndicator activeIndex={selectedIndex} count={variantCount} />
           </View>
-
-          <View style={styles.bottomBarWrap}>
-            <BottomActionBar
-              imageUrl={activeGeneration.imageUrl}
-              onRefineChange={setRefineText}
-              onRefineSubmit={handleRefineSubmit}
-              refineText={refineText}
-            />
-          </View>
-        </KeyboardAvoidingView>
+        </View>
       </SafeAreaView>
+
+      <ResultsBottomSheet
+        activeIndex={selectedIndex}
+        batchCopy={response.copy}
+        bottomInset={insets.bottom}
+        collapseToken={sheetCollapseToken}
+        generation={activeGeneration}
+        imageQuality={refineQuality}
+        imageUrl={activeGeneration.imageUrl}
+        isRefining={isRefining}
+        onImageQualityChange={setRefineQuality}
+        onRefineChange={setRefineText}
+        onRefineSubmit={() => void handleRefineSubmit()}
+        productName={productName}
+        refineText={refineText}
+        totalCount={variantCount}
+      />
 
       <ResultsInfoSheet
         activeIndex={selectedIndex}
-        batchCopy={response.copy}
         failedResults={failedResults}
         generation={activeGeneration}
         mode={infoSheetMode}
@@ -912,41 +1331,33 @@ const styles = StyleSheet.create({
   carouselScroll: {
     backgroundColor: 'transparent',
   },
-  bottomBar: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(18, 14, 12, 0.72)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 28,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  bottomBarWrap: {
-    paddingBottom: 8,
-    paddingHorizontal: HORIZONTAL_PADDING,
-    paddingTop: 12,
-  },
-  bottomShareButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 999,
-    height: 46,
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 12,
-    width: 46,
-  },
-  bottomSideButton: {
+  actionButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 999,
-    height: 46,
+    borderRadius: 14,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    height: 44,
     justifyContent: 'center',
-    width: 46,
+  },
+  actionButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  bottomSheetHandle: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: 999,
+    height: 4,
+    marginBottom: 10,
+    width: 42,
   },
   carouselPage: {
     alignItems: 'center',
@@ -1046,36 +1457,168 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     justifyContent: 'center',
-    marginTop: 18,
+    marginTop: 12,
   },
-  refineBoltIcon: {
-    height: 14,
-    marginRight: 8,
-    tintColor: colors.primarySoft,
-    width: 14,
+  productMeta: {
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: 12,
+    marginTop: 2,
   },
-  refineCreditBadge: {
-    marginLeft: 8,
-  },
-  refineCreditText: {
-    color: 'rgba(255, 255, 255, 0.58)',
-    fontSize: 11,
+  productTitle: {
+    color: colors.white,
+    fontFamily: SERIF_FONT,
+    fontSize: 24,
     fontWeight: '700',
+    lineHeight: 30,
   },
-  refineFieldWrap: {
+  refineBar: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.primary,
     borderRadius: 999,
-    flex: 1,
     flexDirection: 'row',
     minHeight: 46,
-    paddingHorizontal: 14,
+    paddingLeft: 14,
+    paddingRight: 5,
+    paddingVertical: 5,
   },
-  refineInput: {
+  refineBarBolt: {
+    height: 16,
+    marginRight: 10,
+    tintColor: colors.white,
+    width: 16,
+  },
+  refineBarInput: {
     color: colors.white,
     flex: 1,
-    fontSize: 14,
+    fontFamily: SERIF_FONT,
+    fontSize: 15,
+    fontStyle: 'italic',
     paddingVertical: 0,
+  },
+  refineBarSubmit: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  refineBarSubmitDisabled: {
+    opacity: 0.55,
+  },
+  refineChip: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  refineChipSelected: {
+    backgroundColor: 'rgba(199, 101, 59, 0.22)',
+    borderColor: colors.primarySoft,
+  },
+  refineChipText: {
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  refineChipTextSelected: {
+    color: colors.white,
+    fontWeight: '600',
+  },
+  refinePanel: {
+    marginTop: 12,
+  },
+  refineSuggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  qualityHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    marginTop: 14,
+  },
+  qualityHint: {
+    color: 'rgba(255, 255, 255, 0.42)',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  qualityLabel: {
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  qualityOption: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  qualityOptionCredits: {
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  qualityOptionCreditsSelected: {
+    color: 'rgba(255, 255, 255, 0.82)',
+  },
+  qualityOptionLabel: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  qualityOptionLabelSelected: {
+    color: colors.white,
+  },
+  qualityOptionSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  qualityRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  resultsBottomSheet: {
+    backgroundColor: 'rgba(18, 14, 12, 0.94)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingTop: 8,
+    position: 'absolute',
+    right: 0,
+    zIndex: 20,
+  },
+  sheetDragZone: {
+    paddingBottom: 2,
+  },
+  sheetFixedActions: {
+    paddingTop: 4,
+  },
+  sheetKeyboardAvoid: {
+    flex: 1,
+  },
+  sheetScroll: {
+    flex: 1,
+    marginTop: 16,
+  },
+  sheetScrollContent: {
+    paddingBottom: 12,
   },
   resultImage: {
     height: '100%',
@@ -1088,19 +1631,67 @@ const styles = StyleSheet.create({
     backgroundColor: DEFAULT_AMBIENT_COLOR,
     flex: 1,
   },
-  copyAllButton: {
+  copyAllFormattedButton: {
     alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
     flexDirection: 'row',
     gap: 8,
-    height: 46,
+    height: 50,
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+    marginTop: 4,
   },
-  copyAllButtonText: {
+  copyAllFormattedText: {
     color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  copyKitBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    height: 22,
+    justifyContent: 'center',
+    minWidth: 22,
+    paddingHorizontal: 6,
+  },
+  copyKitBadgeText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  copyKitHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  copyKitHint: {
+    color: 'rgba(255, 255, 255, 0.42)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  copyKitTeaser: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingVertical: 2,
+  },
+  copyKitTeaserText: {
+    color: 'rgba(255, 255, 255, 0.72)',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  copyKitTitle: {
+    color: colors.primarySoft,
+    fontFamily: SERIF_FONT,
+    fontSize: 22,
     fontWeight: '700',
   },
   copyCard: {

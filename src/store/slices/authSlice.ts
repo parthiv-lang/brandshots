@@ -16,6 +16,7 @@ import {
   removeToken,
   saveToken,
 } from '../../services/storage/tokenStorage';
+import { clearAllAsyncStorage } from '../../services/storage/appStorage';
 import { removeMe, saveMe } from '../../services/storage/userStorage';
 import {
   identifyRevenueCatUser,
@@ -165,6 +166,28 @@ export const logoutThunk = createAsyncThunk<void, void>(
   },
 );
 
+export const deleteAccountThunk = createAsyncThunk<void, void, { rejectValue: string }>(
+  'auth/deleteAccount',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await authApi.deleteAccount();
+
+      if (!response.deleted) {
+        return rejectWithValue('Account deletion failed. Please try again.');
+      }
+
+      await signOutFromGoogle();
+      await logoutRevenueCatUser();
+      await clearAllAsyncStorage();
+    } catch (error) {
+      return rejectWithValue(
+        (error as { message?: string })?.message ??
+          'Account deletion failed. Please try again.',
+      );
+    }
+  },
+);
+
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -255,14 +278,18 @@ const authSlice = createSlice({
         state.error = action.payload || null;
       });
 
-    builder.addCase(logoutThunk.fulfilled, state => {
+    const clearAuthSession = (state: AuthState) => {
       state.isAuthenticated = false;
       state.accessToken = null;
       state.user = null;
       state.credits = null;
       state.error = null;
       state.pendingProvider = null;
-    });
+    };
+
+    builder
+      .addCase(logoutThunk.fulfilled, clearAuthSession)
+      .addCase(deleteAccountThunk.fulfilled, clearAuthSession);
 
     builder
       .addCase(refreshMeThunk.fulfilled, (state, action) => {

@@ -14,4 +14,7 @@ export type {
   ListGenerationsParams,
   ListGenerationsResponse,
   PublicGeneration,
+  RefineGenerationRequest,
+  RefineGenerationResponse,
+  RefineImageQuality,
 } from './types';

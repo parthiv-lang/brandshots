@@ -24,6 +24,10 @@ export type MeResponse = {
   credits: AuthCredits;
 };
 
+export type DeleteAccountResponse = {
+  deleted: boolean;
+};
+
 export type RawAuthUser = {
   id?: string;
   email?: string | null;

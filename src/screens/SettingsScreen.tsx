@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   ImageSourcePropType,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,6 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
+  deleteAccountThunk,
   logoutThunk,
   refreshMeThunk,
   selectCredits,
@@ -24,8 +26,12 @@ import {
 import type { RootStackParamList } from '../navigation/types';
 import { openPaywall } from '../utils/openPaywall';
 import { colors } from '../theme/colors';
+import AppIcon from '../components/AppIcon';
 
 const HORIZONTAL_PADDING = 18;
+const PRIVACY_URL = 'https://www.brandshots.app/privacy';
+const TERMS_URL = 'https://www.brandshots.app/terms';
+const CONTACT_EMAIL = 'info@baruzotech.com';
 
 const profileIcon = require('../assets/profile-1341-svgrepo-com.png');
 const creditsIcon = require('../assets/electricity-svgrepo-com.png');
@@ -68,6 +74,45 @@ function SettingsIcon({
   );
 }
 
+async function openExternalUrl(url: string) {
+  try {
+    const canOpen = await Linking.canOpenURL(url);
+
+    if (!canOpen) {
+      Alert.alert('Unable to Open', 'This link could not be opened on your device.');
+      return;
+    }
+
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert('Unable to Open', 'Something went wrong. Please try again.');
+  }
+}
+
+function SettingsLinkRow({
+  label,
+  onPress,
+  showDivider = true,
+}: {
+  label: string;
+  onPress: () => void;
+  showDivider?: boolean;
+}) {
+  return (
+    <>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={onPress}
+        style={styles.linkRow}
+      >
+        <Text style={styles.linkRowLabel}>{label}</Text>
+        <AppIcon color={colors.textSoft} name="chevron-right" size={18} />
+      </TouchableOpacity>
+      {showDivider ? <View style={styles.linkDivider} /> : null}
+    </>
+  );
+}
+
 function SettingsScreen() {
   const dispatch = useAppDispatch();
   const navigation =
@@ -76,6 +121,7 @@ function SettingsScreen() {
   const credits = useAppSelector(selectCredits);
   const [isRefreshing, setRefreshing] = useState(false);
   const [isSigningOut, setSigningOut] = useState(false);
+  const [isDeletingAccount, setDeletingAccount] = useState(false);
 
   const creditBalance = credits?.balance ?? 0;
   const displayName = user?.name?.trim() || 'Your account';
@@ -114,7 +160,7 @@ function SettingsScreen() {
   };
 
   const showSignOutAlert = () => {
-    if (isSigningOut) {
+    if (isSigningOut || isDeletingAccount) {
       return;
     }
 
@@ -131,6 +177,50 @@ function SettingsScreen() {
           style: 'destructive',
           onPress: () => {
             void handleSignOut();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAccount = async () => {
+    if (isDeletingAccount) {
+      return;
+    }
+
+    setDeletingAccount(true);
+    try {
+      await dispatch(deleteAccountThunk()).unwrap();
+    } catch (error) {
+      Alert.alert(
+        'Deletion Failed',
+        typeof error === 'string'
+          ? error
+          : 'Account deletion failed. Please try again.',
+      );
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const showDeleteAccountAlert = () => {
+    if (isSigningOut || isDeletingAccount) {
+      return;
+    }
+
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account and all your data. This cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void handleDeleteAccount();
           },
         },
       ],
@@ -234,6 +324,37 @@ function SettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeading}>
             <View style={styles.sectionLabelRow}>
+              <AppIcon color={colors.primary} name="file-text" size={14} />
+              <Text style={styles.sectionLabel}>LEGAL</Text>
+            </View>
+          </View>
+
+          <View style={styles.legalCard}>
+            <SettingsLinkRow
+              label="Privacy Policy"
+              onPress={() => {
+                void openExternalUrl(PRIVACY_URL);
+              }}
+            />
+            <SettingsLinkRow
+              label="Terms of Service"
+              onPress={() => {
+                void openExternalUrl(TERMS_URL);
+              }}
+            />
+            <SettingsLinkRow
+              label="Contact"
+              onPress={() => {
+                void openExternalUrl(`mailto:${CONTACT_EMAIL}`);
+              }}
+              showDivider={false}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <View style={styles.sectionLabelRow}>
               <SettingsIcon source={signOutSectionIcon} />
               <Text style={styles.sectionLabel}>ACCOUNT</Text>
             </View>
@@ -249,17 +370,43 @@ function SettingsScreen() {
 
             <TouchableOpacity
               activeOpacity={0.9}
-              disabled={isSigningOut}
+              disabled={isSigningOut || isDeletingAccount}
               onPress={showSignOutAlert}
               style={[
                 styles.signOutButton,
-                isSigningOut && styles.signOutButtonDisabled,
+                (isSigningOut || isDeletingAccount) && styles.signOutButtonDisabled,
               ]}
             >
               {isSigningOut ? (
                 <ActivityIndicator color={colors.white} size="small" />
               ) : (
                 <Text style={styles.signOutButtonText}>SIGN OUT</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.deleteAccountCard}>
+            <View style={styles.signOutText}>
+              <Text style={styles.deleteAccountTitle}>Delete account</Text>
+              <Text style={styles.deleteAccountSubtitle}>
+                Permanently removes your account and all data
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              disabled={isSigningOut || isDeletingAccount}
+              onPress={showDeleteAccountAlert}
+              style={[
+                styles.deleteAccountButton,
+                (isSigningOut || isDeletingAccount) &&
+                  styles.deleteAccountButtonDisabled,
+              ]}
+            >
+              {isDeletingAccount ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.deleteAccountButtonText}>DELETE</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -350,6 +497,46 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 56,
   },
+  deleteAccountButton: {
+    alignItems: 'center',
+    backgroundColor: '#B42318',
+    borderRadius: 14,
+    justifyContent: 'center',
+    minHeight: 42,
+    minWidth: 104,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  deleteAccountButtonDisabled: {
+    opacity: 0.7,
+  },
+  deleteAccountButtonText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+  },
+  deleteAccountCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  deleteAccountSubtitle: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  deleteAccountTitle: {
+    color: '#B42318',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   eyebrow: {
     color: colors.textMuted,
     fontSize: 11,
@@ -359,6 +546,29 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 22,
+  },
+  legalCard: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 18,
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+  },
+  linkDivider: {
+    backgroundColor: colors.border,
+    height: StyleSheet.hairlineWidth,
+  },
+  linkRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingVertical: 14,
+  },
+  linkRowLabel: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
   },
   profileCard: {
     alignItems: 'center',

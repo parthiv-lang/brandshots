@@ -4,6 +4,8 @@ import { http } from '../api/http';
 import type {
   ListGenerationsParams,
   ListGenerationsResponse,
+  RefineGenerationRequest,
+  RefineGenerationResponse,
 } from './types';
 
 function toQueryParams(
@@ -46,5 +48,16 @@ export const generationsApi = {
 
   delete(id: string): Promise<void> {
     return http.delete<void>(endpoints.generations.byId(id));
+  },
+
+  refine(
+    id: string,
+    body: RefineGenerationRequest,
+  ): Promise<RefineGenerationResponse> {
+    return http.post<RefineGenerationResponse>(
+      endpoints.generations.refine(id),
+      body,
+      { timeout: 0 },
+    );
   },
 };

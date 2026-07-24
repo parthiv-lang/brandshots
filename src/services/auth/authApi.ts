@@ -5,6 +5,7 @@ import {
   normalizeAuthCredits,
   normalizeAuthUser,
   type AuthResponse,
+  type DeleteAccountResponse,
   type MeResponse,
   type RawAuthCredits,
   type RawAuthUser,
@@ -74,5 +75,9 @@ export const authApi = {
 
   logout() {
     return http.post<void>(endpoints.auth.logout);
+  },
+
+  deleteAccount(): Promise<DeleteAccountResponse> {
+    return http.delete<DeleteAccountResponse>(endpoints.auth.me);
   },
 };

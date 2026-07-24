@@ -62,6 +62,16 @@ function getInitials(name?: string | null, email?: string | null) {
   return source.slice(0, 2).toUpperCase();
 }
 
+function formatHomeDate(date = new Date()) {
+  const weekday = date.toLocaleDateString('en-GB', {weekday: 'long'});
+  const dayMonth = date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+  });
+
+  return `${weekday}, ${dayMonth}`;
+}
+
 const cameraIcon = require('../assets/camera-svgrepo-com (2).png');
 const fileIcon = require('../assets/gallery-send-svgrepo-com.png');
 const libraryIcon = require('../assets/library-svgrepo-com.png');
@@ -117,6 +127,10 @@ function HomeScreen() {
 
   const handleViewAllCreatives = () => {
     navigation.navigate('MainTabs', { screen: 'Creatives' });
+  };
+
+  const handleAvatarPress = () => {
+    navigation.navigate('MainTabs', { screen: 'Settings' });
   };
 
   const handlePickerResponse = (response: ImagePickerResponse) => {
@@ -218,18 +232,20 @@ function HomeScreen() {
       >
         <View style={styles.topRow}>
           <View style={styles.creditPill}>
-            <View style={styles.creditIcon}>
-              <Text style={styles.creditIconText}>S</Text>
-            </View>
+            <View style={styles.creditDot} />
             <Text style={styles.creditText}>{creditBalance} credits</Text>
           </View>
 
-          <View style={styles.avatar}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleAvatarPress}
+            style={styles.avatar}
+          >
             <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.dateText}>Thursday, 21 May</Text>
+        <Text style={styles.dateText}>{formatHomeDate()}</Text>
 
         <View style={styles.heroBlock}>
           <Text style={styles.heroTextDark}>Make something</Text>
@@ -399,19 +415,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 8,
   },
-  creditIcon: {
-    alignItems: 'center',
+  creditDot: {
     backgroundColor: colors.primary,
-    borderRadius: 10,
-    height: 20,
-    justifyContent: 'center',
+    borderRadius: 4,
+    height: 8,
     marginRight: 8,
-    width: 20,
-  },
-  creditIconText: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: '700',
+    width: 8,
   },
   creditPill: {
     alignItems: 'center',

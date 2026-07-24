@@ -5,7 +5,7 @@ import type {
   ListGenerationsParams,
   PublicGeneration,
 } from '../../services/generations/types';
-import { logoutThunk } from './authSlice';
+import { deleteAccountThunk, logoutThunk } from './authSlice';
 
 export const HOME_RECENT_LIMIT = 4;
 
@@ -70,6 +70,9 @@ const generationsSlice = createSlice({
         state.error = action.payload ?? null;
       })
       .addCase(logoutThunk.fulfilled, state => {
+        Object.assign(state, initialState);
+      })
+      .addCase(deleteAccountThunk.fulfilled, state => {
         Object.assign(state, initialState);
       });
   },

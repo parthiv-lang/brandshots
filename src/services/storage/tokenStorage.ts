@@ -19,6 +19,10 @@ export function getCachedToken(): string | null {
   return cachedToken;
 }
 
+export function resetTokenCache(): void {
+  cachedToken = null;
+}
+
 export async function saveToken(token: string): Promise<void> {
   cachedToken = token;
   await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);

@@ -52,6 +52,7 @@ export type SignInParams = {
 };
 
 export type RootStackParamList = {
+  Onboarding: undefined;
   SignIn: SignInParams | undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   UploadProduct: UploadProductParams;

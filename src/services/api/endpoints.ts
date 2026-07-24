@@ -13,6 +13,7 @@ export const endpoints = {
   generations: {
     list: '/generations',
     byId: (id: string) => `/generations/${id}`,
+    refine: (id: string) => `/generations/${id}/refine`,
     generate: '/generate',
   },
   products: {

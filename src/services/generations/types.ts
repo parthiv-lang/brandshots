@@ -113,3 +113,51 @@ export type BatchResponse = {
   copy?: GenerationCopy;
   autoCreatedProductId?: string;
 };
+
+export type RefineImageQuality = 'low' | 'medium' | 'high';
+
+export type RefineGenerationRequest = {
+  feedback: string;
+  imageQuality: RefineImageQuality;
+};
+
+export type RefineGenerationResponse = {
+  id: string;
+  createdAt: string;
+  imageUrl: string;
+  imageSize: string;
+  aspectRatio: string;
+  width: number;
+  height: number;
+  mode: string;
+  platformId: string | null;
+  platformLabel: string | null;
+  platform: string | null;
+  nicheId: string | null;
+  nicheLabel: string | null;
+  vibeId: string | null;
+  vibeLabel: string | null;
+  brandTitle: string | null;
+  brandDescription: string | null;
+  brandWebsite: string | null;
+  headline: string | null;
+  cta: string | null;
+  categoryId: string | null;
+  categoryLabel: string | null;
+  lookId: string | null;
+  lookLabel: string | null;
+  treatmentId: string | null;
+  treatmentLabel: string | null;
+  audience: string | null;
+  offer: string | null;
+  copy: string | GenerationCopy | null;
+  productId: string | null;
+  parentGenerationId: string | null;
+  refineFeedback: string | null;
+  creditsUsed: number;
+  prompt: string;
+  favorite: boolean;
+  credits?: {
+    balance: number;
+  };
+};

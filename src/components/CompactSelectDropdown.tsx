@@ -22,10 +22,13 @@ type CompactSelectDropdownProps = {
   options: CompactSelectOption[];
   onChange: (value: string) => void;
   direction?: 'up' | 'down';
+  open?: boolean;
   onOpenChange?: (open: boolean) => void;
   triggerStyle?: StyleProp<ViewStyle>;
+  triggerless?: boolean;
   valueStyle?: StyleProp<TextStyle>;
   minWidth?: number;
+  matchContainerWidth?: boolean;
 };
 
 function CompactSelectDropdown({
@@ -33,12 +36,17 @@ function CompactSelectDropdown({
   options,
   onChange,
   direction = 'down',
+  open: openProp,
   onOpenChange,
   triggerStyle,
+  triggerless = false,
   valueStyle,
   minWidth = 44,
+  matchContainerWidth = false,
 }: CompactSelectDropdownProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const menuOpen = isControlled ? openProp : internalOpen;
 
   const selectedLabel = useMemo(
     () => options.find(option => option.value === value)?.label ?? value,
@@ -46,45 +54,68 @@ function CompactSelectDropdown({
   );
 
   useEffect(() => {
-    onOpenChange?.(open);
-  }, [onOpenChange, open]);
+    if (!isControlled) {
+      onOpenChange?.(menuOpen);
+    }
+  }, [isControlled, menuOpen, onOpenChange]);
 
   const setMenuOpen = (next: boolean) => {
-    setOpen(next);
+    if (isControlled) {
+      onOpenChange?.(next);
+      return;
+    }
+    setInternalOpen(next);
   };
 
   return (
     <View
       style={[
         styles.wrap,
-        { minWidth },
-        open && styles.wrapOpen,
+        matchContainerWidth ? styles.wrapMatchContainer : { minWidth },
+        menuOpen && styles.wrapOpen,
       ]}
     >
-      <Pressable
-        onPress={() => setMenuOpen(!open)}
-        style={[styles.trigger, triggerStyle]}
-      >
-        <Text style={[styles.valueText, valueStyle]}>{selectedLabel}</Text>
-        <AppIcon
-          color={colors.textMuted}
-          name="chevron-down"
-          size={12}
-          style={[
-            styles.chevron,
-            direction === 'up' && styles.chevronUp,
-            open && direction === 'down' && styles.chevronOpenDown,
-            open && direction === 'up' && styles.chevronOpenUp,
-          ]}
-        />
-      </Pressable>
+      {triggerless ? (
+        <View style={[styles.trigger, triggerStyle]}>
+          <Text style={[styles.valueText, valueStyle]}>{selectedLabel}</Text>
+          <AppIcon
+            color={colors.textMuted}
+            name="chevron-down"
+            size={12}
+            style={[
+              styles.chevron,
+              direction === 'up' && styles.chevronUp,
+              menuOpen && direction === 'down' && styles.chevronOpenDown,
+              menuOpen && direction === 'up' && styles.chevronOpenUp,
+            ]}
+          />
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => setMenuOpen(!menuOpen)}
+          style={[styles.trigger, triggerStyle]}
+        >
+          <Text style={[styles.valueText, valueStyle]}>{selectedLabel}</Text>
+          <AppIcon
+            color={colors.textMuted}
+            name="chevron-down"
+            size={12}
+            style={[
+              styles.chevron,
+              direction === 'up' && styles.chevronUp,
+              menuOpen && direction === 'down' && styles.chevronOpenDown,
+              menuOpen && direction === 'up' && styles.chevronOpenUp,
+            ]}
+          />
+        </Pressable>
+      )}
 
-      {open ? (
+      {menuOpen ? (
         <View
           style={[
             styles.menu,
             direction === 'up' ? styles.menuUp : styles.menuDown,
-            { minWidth },
+            matchContainerWidth ? styles.menuMatchContainer : { minWidth },
           ]}
         >
           {options.map(option => {
@@ -161,6 +192,9 @@ const styles = StyleSheet.create({
   menuItemTextActive: {
     color: colors.primaryDark,
   },
+  menuMatchContainer: {
+    width: '100%',
+  },
   menuUp: {
     bottom: '100%',
     left: 0,
@@ -186,6 +220,10 @@ const styles = StyleSheet.create({
   wrap: {
     position: 'relative',
     zIndex: 1,
+  },
+  wrapMatchContainer: {
+    alignSelf: 'stretch',
+    width: '100%',
   },
   wrapOpen: {
     elevation: 12,

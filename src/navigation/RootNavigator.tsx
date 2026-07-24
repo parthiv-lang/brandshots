@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import MainTabNavigator from './MainTabNavigator';
 import BrandDetailsScreen from '../screens/BrandDetailsScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
 import ProductShootScreen from '../screens/ProductShootScreen';
 import ShootResultsScreen from '../screens/ShootResultsScreen';
 import SignInScreen from '../screens/SignInScreen';
@@ -13,6 +14,7 @@ import {
   selectAuthStatus,
   selectIsAuthenticated,
 } from '../store/slices/authSlice';
+import { loadOnboardingCompleted } from '../services/storage/onboardingStorage';
 import type { RootStackParamList } from './types';
 import { navigationRef } from './navigationRef';
 
@@ -28,7 +30,10 @@ function AuthRedirectHandler() {
     }
 
     const currentRoute = navigationRef.getCurrentRoute();
-    if (currentRoute?.name !== 'SignIn') {
+    if (
+      currentRoute?.name !== 'SignIn' &&
+      currentRoute?.name !== 'Onboarding'
+    ) {
       navigationRef.reset({
         index: 0,
         routes: [{ name: 'SignIn' }],
@@ -41,14 +46,34 @@ function AuthRedirectHandler() {
 
 function RootNavigator() {
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const [onboardingReady, setOnboardingReady] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+
+  useEffect(() => {
+    void loadOnboardingCompleted().then(completed => {
+      setHasCompletedOnboarding(completed);
+      setOnboardingReady(true);
+    });
+  }, []);
+
+  if (!onboardingReady) {
+    return null;
+  }
+
+  const initialRouteName = isAuthenticated
+    ? 'MainTabs'
+    : hasCompletedOnboarding
+      ? 'SignIn'
+      : 'Onboarding';
 
   return (
     <>
       <AuthRedirectHandler />
       <Stack.Navigator
-        initialRouteName={isAuthenticated ? 'MainTabs' : 'SignIn'}
+        initialRouteName={initialRouteName}
         screenOptions={{ headerShown: false }}
       >
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         <Stack.Screen name="SignIn" component={SignInScreen} />
         <Stack.Screen name="MainTabs" component={MainTabNavigator} />
         <Stack.Screen

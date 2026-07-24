@@ -9,12 +9,17 @@ export type ApiError = {
 };
 
 function normalizeError(error: unknown): ApiError {
-  const axiosError = error as AxiosError<{ message?: string; error?: string }>;
+  const axiosError = error as AxiosError<{
+    message?: string;
+    error?: string;
+    detail?: string;
+  }>;
 
   if (axiosError?.isAxiosError) {
     const data = axiosError.response?.data;
     const message =
       (typeof data === 'object' && data && 'message' in data && data.message) ||
+      (typeof data === 'object' && data && 'detail' in data && data.detail) ||
       (typeof data === 'object' && data && 'error' in data && data.error) ||
       axiosError.message ||
       'Something went wrong. Please try again.';

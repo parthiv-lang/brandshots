@@ -264,7 +264,7 @@ function ProductShootScreen({ navigation, route }: Props) {
   const [customWidthText, setCustomWidthText] = useState(String(CUSTOM_DIMENSION_DEFAULT));
   const [customHeightText, setCustomHeightText] = useState(String(CUSTOM_DIMENSION_DEFAULT));
   const [notes, setNotes] = useState('');
-  const [quantity, setQuantity] = useState(3);
+  const [quantity, setQuantity] = useState(1);
   const [quality, setQuality] = useState<QualityId>('std');
   const [styleCardIndex, setStyleCardIndex] = useState(0);
   const [quantityMenuOpen, setQuantityMenuOpen] = useState(false);
@@ -1068,24 +1068,27 @@ function ProductShootScreen({ navigation, route }: Props) {
         style={[styles.bottomBarSafe, quantityMenuOpen && styles.bottomBarSafeOpen]}
       >
         <View style={styles.bottomBar}>
-          <View style={[styles.bottomLeft, quantityMenuOpen && styles.bottomLeftOpen]}>
+          <Pressable
+            onPress={() => setQuantityMenuOpen(open => !open)}
+            style={[styles.bottomLeft, quantityMenuOpen && styles.bottomLeftOpen]}
+          >
             <View style={styles.variantTrack}>
-              <View style={styles.variantItem}>
-                <Text style={styles.qualityLabel}>VARIANT</Text>
-                <CompactSelectDropdown
-                  direction="up"
-                  minWidth={40}
-                  onChange={nextValue => setQuantity(Number(nextValue))}
-                  onOpenChange={setQuantityMenuOpen}
-                  options={QUANTITY_SELECT_OPTIONS}
-                  triggerStyle={styles.variantButton}
-                  value={String(quantity)}
-                  valueStyle={styles.variantValue}
-                />
-              </View>
+              <Text style={styles.qualityLabel}>VARIANT</Text>
+              <CompactSelectDropdown
+                direction="up"
+                matchContainerWidth
+                onChange={nextValue => setQuantity(Number(nextValue))}
+                onOpenChange={setQuantityMenuOpen}
+                open={quantityMenuOpen}
+                options={QUANTITY_SELECT_OPTIONS}
+                triggerStyle={styles.variantButton}
+                triggerless
+                value={String(quantity)}
+                valueStyle={styles.variantValue}
+              />
             </View>
             <Text style={styles.quantityMultiply}>×</Text>
-          </View>
+          </Pressable>
 
           <View style={styles.qualityTrack}>
             {QUALITY_OPTIONS.map(option => {
@@ -1534,19 +1537,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 0,
   },
-  variantItem: {
-    alignItems: 'center',
-    borderRadius: 10,
-    minWidth: 52,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-  },
   variantTrack: {
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.borderSoft,
     borderRadius: 12,
     borderWidth: 1,
-    padding: 3,
+    minWidth: 52,
+    paddingHorizontal: 3,
+    paddingVertical: 9,
   },
   variantValue: {
     color: colors.textMuted,

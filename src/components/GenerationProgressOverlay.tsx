@@ -55,12 +55,63 @@ function quantityWord(count: number) {
   return String(count);
 }
 
+type RotatingLoaderArcProps = {
+  active: boolean;
+};
+
+function RotatingLoaderArc({ active }: RotatingLoaderArcProps) {
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!active) {
+      spin.stopAnimation();
+      spin.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        duration: 1100,
+        easing: Easing.linear,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [active, spin]);
+
+  if (!active) {
+    return null;
+  }
+
+  const rotation = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.ringSpinnerWrap, { transform: [{ rotate: rotation }] }]}
+    >
+      <View style={styles.ringSpinnerArc} />
+    </Animated.View>
+  );
+}
+
 type CircularProgressRingProps = {
   progress: number;
+  spinning?: boolean;
   children: React.ReactNode;
 };
 
-function CircularProgressRing({ progress, children }: CircularProgressRingProps) {
+function CircularProgressRing({
+  progress,
+  spinning = false,
+  children,
+}: CircularProgressRingProps) {
   const half = RING_SIZE / 2;
   const clamped = Math.min(1, Math.max(0, progress));
   const firstHalfRotation = Math.min(clamped * 2, 1) * 180;
@@ -73,37 +124,43 @@ function CircularProgressRing({ progress, children }: CircularProgressRingProps)
       <View pointerEvents="none" style={styles.ringOverlay}>
         <View style={styles.ringTrack} />
 
-        <View style={styles.ringClipRight}>
-          <View
-            style={[
-              styles.ringArc,
-              {
-                left: -half,
-                borderColor: 'transparent',
-                borderTopColor: colors.primary,
-                borderRightColor: colors.primary,
-                transform: [{ rotate: `${firstHalfRotation}deg` }],
-              },
-            ]}
-          />
-        </View>
+        {!spinning ? (
+          <>
+            <View style={styles.ringClipRight}>
+              <View
+                style={[
+                  styles.ringArc,
+                  {
+                    left: -half,
+                    borderColor: 'transparent',
+                    borderTopColor: colors.primary,
+                    borderRightColor: colors.primary,
+                    transform: [{ rotate: `${firstHalfRotation}deg` }],
+                  },
+                ]}
+              />
+            </View>
 
-        {clamped > 0.5 ? (
-          <View style={styles.ringClipLeft}>
-            <View
-              style={[
-                styles.ringArc,
-                {
-                  left: 0,
-                  borderColor: 'transparent',
-                  borderTopColor: colors.primary,
-                  borderLeftColor: colors.primary,
-                  transform: [{ rotate: `${secondHalfRotation}deg` }],
-                },
-              ]}
-            />
-          </View>
+            {clamped > 0.5 ? (
+              <View style={styles.ringClipLeft}>
+                <View
+                  style={[
+                    styles.ringArc,
+                    {
+                      left: 0,
+                      borderColor: 'transparent',
+                      borderTopColor: colors.primary,
+                      borderLeftColor: colors.primary,
+                      transform: [{ rotate: `${secondHalfRotation}deg` }],
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+          </>
         ) : null}
+
+        <RotatingLoaderArc active={spinning} />
       </View>
     </View>
   );
@@ -277,7 +334,10 @@ function GenerationProgressOverlay({
         </View>
 
         <View style={styles.content}>
-          <CircularProgressRing progress={ringProgress}>
+          <CircularProgressRing
+            progress={ringProgress}
+            spinning={!generationComplete}
+          >
             <Text style={styles.ringCount}>{quantity}</Text>
           </CircularProgressRing>
 
@@ -440,6 +500,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+  },
+  ringSpinnerArc: {
+    borderColor: 'transparent',
+    borderRadius: RING_SIZE / 2,
+    borderRightColor: colors.primary,
+    borderTopColor: colors.primary,
+    borderWidth: RING_STROKE,
+    height: RING_SIZE,
+    position: 'absolute',
+    width: RING_SIZE,
+  },
+  ringSpinnerWrap: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ringTrack: {
     borderColor: colors.border,
