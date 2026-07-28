@@ -2,6 +2,11 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Applied once google-services.json is placed at android/app/google-services.json
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}
+
 project.ext.vectoricons = [
     iconFontsDir: "../../node_modules/@react-native-vector-icons/feather/fonts",
     iconFontNames: [ "Feather.ttf" ]

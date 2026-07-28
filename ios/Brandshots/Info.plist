@@ -33,14 +33,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
 	<key>NSCameraUsageDescription</key>
-	<string>We need camera access.</string>
+	<string>BrandShots uses the camera so you can capture product photos for your listings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Need access to save images</string>
+	<string>BrandShots needs access to your photo library so you can upload existing product images.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Need access to save images to gallery</string>
+	<string>BrandShots needs permission to save generated product images to your photo library.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

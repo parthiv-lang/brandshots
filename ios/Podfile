@@ -9,7 +9,11 @@ require_relative '../node_modules/react-native-permissions/scripts/setup'
 
 platform :ios, '15.1'
 
-use_modular_headers!
+# RN 0.84+ defaults to prebuilt React-Core. With use_frameworks + RNFB,
+# Clang absorbs RCTBridgeModule into RNFBApp and breaks RNFBAnalytics.
+# See: https://github.com/invertase/react-native-firebase/issues/8883
+ENV['RCT_USE_PREBUILT_RNCORE'] = '0'
+ENV['RCT_USE_RN_DEP'] = '0'
 
 prepare_react_native_project!
 
@@ -19,10 +23,20 @@ setup_permissions([
   'PhotoLibraryAddOnly',
 ])
 
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
+# Required by firebase-ios-sdk / @react-native-firebase
+use_frameworks! :linkage => :static
+$RNFirebaseAsStaticFramework = true
+$RNFirebaseAnalyticsWithoutAdIdSupport = true
+
+# Extra safety: force RNFB pods to plain static libraries (not modular frameworks).
+pre_install do |installer|
+  installer.pod_targets.each do |pod|
+    if pod.name.start_with?('RNFB')
+      def pod.build_type
+        Pod::BuildType.static_library
+      end
+    end
+  end
 end
 
 target 'Brandshots' do
@@ -39,5 +53,13 @@ target 'Brandshots' do
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
     )
+
+    installer.pods_project.targets.each do |target|
+      next unless target.name.start_with?('RNFB')
+
+      target.build_configurations.each do |cfg|
+        cfg.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      end
+    end
   end
 end
