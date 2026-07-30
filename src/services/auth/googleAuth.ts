@@ -9,6 +9,14 @@ export function configureGoogleSignIn() {
     return;
   }
 
+  if (!env.GOOGLE_WEB_CLIENT_ID) {
+    throw new Error(
+      'GOOGLE_WEB_CLIENT_ID is missing. Rebuild the Android app after fixing .env / react-native-config.',
+    );
+  }
+
+  // webClientId must be the Web OAuth client (not Android/iOS).
+  // Android uses package name + SHA-1 from Google Cloud; iOS uses iosClientId.
   GoogleSignin.configure({
     webClientId: env.GOOGLE_WEB_CLIENT_ID,
     iosClientId: env.GOOGLE_IOS_CLIENT_ID || undefined,
@@ -37,10 +45,18 @@ export async function signInWithGoogle(): Promise<string> {
       throw new GoogleSignInCancelledError();
     }
 
-    const idToken = result.data?.idToken;
+    let idToken = result.data?.idToken;
+
+    // Some Android builds return user info from signIn() but need getTokens() for idToken.
+    if (!idToken) {
+      const tokens = await GoogleSignin.getTokens();
+      idToken = tokens.idToken;
+    }
 
     if (!idToken) {
-      throw new Error('Google sign-in did not return an id token.');
+      throw new Error(
+        'Google sign-in did not return an id token. Check GOOGLE_WEB_CLIENT_ID is a Web client ID and loaded at runtime.',
+      );
     }
 
     return idToken;
