@@ -190,6 +190,12 @@ export function buildCreativeBrief(input: GenerateSetupInput): CreativeBrief {
   applyProductShootDetails(brief, input);
   applySocialAdDetails(brief, input.socialAdDetails, input.shootType);
 
+  if (input.jewelryWorkflow) {
+    brief.jewelryWorkflow = input.jewelryWorkflow;
+    brief.jewelrySubtype = input.jewelrySubtype;
+    brief.jewelryPieceCount = input.jewelryPieceCount ?? 1;
+  }
+
   return brief;
 }
 
@@ -222,6 +228,7 @@ export function resolveAspectRatioForBrief(brief: CreativeBrief) {
 export function buildGenerateFormData(input: GenerateSetupInput): FormData {
   const brief = buildCreativeBrief(input);
   const qualitySettings = QUALITY_SETTINGS[input.quality];
+  const imageSize = input.jewelryWorkflow ? '4K' : qualitySettings.imageSize;
   const formData = new FormData();
 
   formData.append('productId', input.productId);
@@ -248,11 +255,14 @@ export function buildGenerateFormData(input: GenerateSetupInput): FormData {
 
   formData.append('briefJson', JSON.stringify(brief));
   formData.append('analysisJson', JSON.stringify(input.analysis));
-  formData.append('textMode', input.textMode ?? 'full_image');
+  formData.append(
+    'textMode',
+    input.jewelryWorkflow ? 'background_only' : (input.textMode ?? 'full_image'),
+  );
   formData.append('batchId', input.batchId);
   formData.append('totalVariants', String(input.variantCount));
   formData.append('variantIndex', '0');
-  formData.append('imageSize', qualitySettings.imageSize);
+  formData.append('imageSize', imageSize);
   formData.append('imageQuality', qualitySettings.imageQuality);
   formData.append('aspectRatio', resolveAspectRatioForBrief(brief));
   formData.append('mode', assetTypeToMode(brief.asset_type));
@@ -278,6 +288,9 @@ export function buildGenerateSetupFromScreenState(input: {
   analysis: GenerateSetupInput['analysis'];
   brandId?: string;
   batchId?: string;
+  jewelryWorkflow?: GenerateSetupInput['jewelryWorkflow'];
+  jewelrySubtype?: string;
+  jewelryPieceCount?: number;
 }): GenerateSetupInput {
   const presetId = input.selectedPresetId || getDefaultPresetIdForShootType(input.shootType);
   const platformId = input.isCustomPlatform
@@ -305,5 +318,8 @@ export function buildGenerateSetupFromScreenState(input: {
     analysis: input.analysis,
     brandId: input.brandId,
     batchId: input.batchId ?? createBatchId(),
+    jewelryWorkflow: input.jewelryWorkflow,
+    jewelrySubtype: input.jewelrySubtype,
+    jewelryPieceCount: input.jewelryPieceCount,
   };
 }

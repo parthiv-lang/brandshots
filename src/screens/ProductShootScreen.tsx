@@ -54,7 +54,13 @@ import GenerationProgressOverlay, {
   type GenerationProgressStep,
 } from '../components/GenerationProgressOverlay';
 import { brandsApi } from '../services/brands';
+import {
+  CREATE_QUALITY_RATES,
+  createShotCredits,
+  useCreditPricing,
+} from '../services/credits/creditPricing';
 import { productsApi } from '../services/products';
+import type { ProductAnalysis } from '../services/products/types';
 import {
   buildGenerateFormData,
   buildGenerateSetupFromScreenState,
@@ -74,6 +80,7 @@ import { colors } from '../theme/colors';
 import type { RootStackParamList } from '../navigation/types';
 import { useAppDispatch } from '../store/hooks';
 import { setCreditsBalance } from '../store/slices/authSlice';
+import { inferJewelrySubtype, isJewelryProduct } from '../utils/jewelry';
 
 const electricityIcon = require('../assets/electricity-svgrepo-com.png');
 const CUSTOM_DIMENSION_MIN = 256;
@@ -101,12 +108,11 @@ const PRESET_CARD_DARK: Record<string, boolean> = {
   ecommerce_hero_plus: false,
 };
 
-const QUALITY_OPTIONS: Array<{ id: QualityId; label: string; credits: number }> =
-  [
-    { id: 'std', label: 'STD', credits: 1 },
-    { id: 'hd', label: 'HD', credits: 2 },
-    { id: 'ultra', label: 'ULTRA', credits: 4 },
-  ];
+const QUALITY_OPTIONS: Array<{ id: QualityId; label: string }> = [
+  { id: 'std', label: 'STD' },
+  { id: 'hd', label: 'HD' },
+  { id: 'ultra', label: 'ULTRA' },
+];
 
 const QUALITY_PROGRESS_LABELS: Record<QualityId, string> = {
   std: 'Standard',
@@ -277,6 +283,8 @@ function ProductShootScreen({ navigation, route }: Props) {
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationComplete, setGenerationComplete] = useState(false);
+  const [productAnalysis, setProductAnalysis] = useState<ProductAnalysis | null>(null);
+  const pricing = useCreditPricing();
   const allowLeaveRef = useRef(false);
 
   const styleScrollRef = useRef<ScrollView>(null);
@@ -368,8 +376,13 @@ function ProductShootScreen({ navigation, route }: Props) {
 
   const styleSectionTitle = isProductShoot ? 'Category' : 'Style';
 
-  const selectedQuality = QUALITY_OPTIONS.find(option => option.id === quality)!;
-  const totalCredits = quantity * selectedQuality.credits;
+  const jewelleryProduct = isJewelryProduct(productAnalysis);
+  const isJewelleryShoot = jewelleryProduct && isProductShoot;
+  const visibleQualityOptions = jewelleryProduct
+    ? QUALITY_OPTIONS.filter(option => option.id === 'ultra')
+    : QUALITY_OPTIONS;
+  const totalCredits =
+    quantity * createShotCredits(pricing, quality, isJewelleryShoot);
 
   const handleSubCategoryChange = useCallback(
     (
@@ -494,6 +507,33 @@ function ProductShootScreen({ navigation, route }: Props) {
   );
 
   useEffect(() => {
+    if (jewelleryProduct) {
+      setQuality(current => (current === 'ultra' ? current : 'ultra'));
+    }
+  }, [jewelleryProduct]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    productsApi
+      .getById(productId)
+      .then(product => {
+        if (!cancelled) {
+          setProductAnalysis(product.analysis ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProductAnalysis(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     brandsApi
@@ -582,6 +622,8 @@ function ProductShootScreen({ navigation, route }: Props) {
         brandId = productShootDetails.brandId ?? defaultBrand?.id;
       }
 
+      const jewelleryProductShoot = isJewelryProduct(product.analysis);
+      const jewelleryShoot = jewelleryProductShoot && shootType === 'product';
       const setup = buildGenerateSetupFromScreenState({
         shootType,
         productId,
@@ -592,12 +634,17 @@ function ProductShootScreen({ navigation, route }: Props) {
         customHeight,
         snapAspectRatio,
         quantity,
-        quality,
+        quality: jewelleryProductShoot ? 'ultra' : quality,
         notes,
         productShootDetails,
         socialAdDetails,
         analysis: product.analysis,
         brandId,
+        jewelryWorkflow: jewelleryShoot ? 'preset' : undefined,
+        jewelrySubtype: jewelleryShoot
+          ? inferJewelrySubtype(product.analysis?.productType)
+          : undefined,
+        jewelryPieceCount: jewelleryShoot ? 1 : undefined,
       });
       const formData = buildGenerateFormData(setup);
 
@@ -1091,8 +1138,10 @@ function ProductShootScreen({ navigation, route }: Props) {
           </Pressable>
 
           <View style={styles.qualityTrack}>
-            {QUALITY_OPTIONS.map(option => {
+            {visibleQualityOptions.map(option => {
               const isActive = quality === option.id;
+              const size = CREATE_QUALITY_RATES[option.id].size;
+              const credits = createShotCredits(pricing, option.id, isJewelleryShoot);
               return (
                 <Pressable
                   key={option.id}
@@ -1116,7 +1165,7 @@ function ProductShootScreen({ navigation, route }: Props) {
                       isActive && styles.qualityCreditsActive,
                     ]}
                   >
-                    {option.credits}cr
+                    {size} · {credits}cr
                   </Text>
                 </Pressable>
               );

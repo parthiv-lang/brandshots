@@ -50,6 +50,8 @@ export function refineResponseToBatchGeneration(
     creditsUsed: generation.creditsUsed,
     prompt: generation.prompt,
     favorite: generation.favorite,
+    jewelryFidelity: generation.jewelryFidelity ?? null,
+    isJewelryWorkflow: generation.isJewelryWorkflow,
   };
 }
 
@@ -92,6 +94,8 @@ export function publicGenerationToBatchGeneration(
     creditsUsed: generation.creditsUsed,
     prompt: generation.prompt,
     favorite: false,
+    jewelryFidelity: generation.jewelryFidelity ?? null,
+    isJewelryWorkflow: generation.isJewelryWorkflow,
   };
 }
 

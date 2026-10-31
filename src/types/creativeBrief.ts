@@ -52,6 +52,9 @@ export type CreativeBrief = {
     depth?: number;
     unit?: 'cm' | 'in' | 'mm';
   };
+  jewelrySubtype?: string;
+  jewelryPieceCount?: number;
+  jewelryWorkflow?: 'preset' | 'reference';
 };
 
 export type GenerateSetupInput = {
@@ -74,6 +77,9 @@ export type GenerateSetupInput = {
   brandId?: string;
   textMode?: string;
   batchId: string;
+  jewelryWorkflow?: 'preset' | 'reference';
+  jewelrySubtype?: string;
+  jewelryPieceCount?: number;
 };
 
 export type { BatchResponse } from '../services/generations/types';

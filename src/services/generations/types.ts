@@ -1,3 +1,14 @@
+export type JewelryFidelity = {
+  presetId: string;
+  subtype: string;
+  pieceCount: number;
+  label: string;
+  promptVersion: string;
+  status?: string;
+  method?: string;
+  requiresReview?: boolean;
+};
+
 export type PublicGeneration = {
   id: string;
   createdAt: string;
@@ -33,6 +44,8 @@ export type PublicGeneration = {
   refineFeedback: string | null;
   creditsUsed: number;
   prompt: string;
+  jewelryFidelity?: JewelryFidelity | null;
+  isJewelryWorkflow?: boolean;
 };
 
 export type ListGenerationsParams = {
@@ -94,6 +107,8 @@ export type BatchGeneration = {
   creditsUsed: number;
   prompt: string;
   favorite: boolean;
+  jewelryFidelity?: JewelryFidelity | null;
+  isJewelryWorkflow?: boolean;
 };
 
 export type BatchResultItem = {
@@ -118,7 +133,8 @@ export type RefineImageQuality = 'low' | 'medium' | 'high';
 
 export type RefineGenerationRequest = {
   feedback: string;
-  imageQuality: RefineImageQuality;
+  imageQuality?: RefineImageQuality;
+  jewelryWorkflow?: 'preset' | 'reference';
 };
 
 export type RefineGenerationResponse = {
@@ -157,6 +173,8 @@ export type RefineGenerationResponse = {
   creditsUsed: number;
   prompt: string;
   favorite: boolean;
+  jewelryFidelity?: JewelryFidelity | null;
+  isJewelryWorkflow?: boolean;
   credits?: {
     balance: number;
   };

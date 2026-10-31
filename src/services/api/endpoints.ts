@@ -16,6 +16,9 @@ export const endpoints = {
     refine: (id: string) => `/generations/${id}/refine`,
     generate: '/generate',
   },
+  credits: {
+    pricing: '/credits/pricing',
+  },
   products: {
     bgRemove: '/bg-remove',
     analyze: '/analyze',

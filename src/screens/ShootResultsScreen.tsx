@@ -33,6 +33,11 @@ import type {
   RefineImageQuality,
 } from '../services/generations/types';
 import { generationsApi } from '../services/generations';
+import {
+  refineShotCredits,
+  useCreditPricing,
+  type CreditPricing,
+} from '../services/credits/creditPricing';
 import { colors } from '../theme/colors';
 import type { RootStackParamList } from '../navigation/types';
 import { downloadImageToGallery } from '../utils/downloadImage';
@@ -44,6 +49,7 @@ import {
   refineResponseToBatchGeneration,
   type CopyField,
 } from '../utils/generationDisplay';
+import { isJewelleryGeneration } from '../utils/jewelry';
 
 const electricityIcon = require('../assets/electricity-svgrepo-com.png');
 
@@ -75,11 +81,10 @@ const REFINE_SUGGESTIONS = [
 const REFINE_QUALITY_OPTIONS: Array<{
   id: RefineImageQuality;
   label: string;
-  credits: number;
 }> = [
-  { id: 'low', label: 'Fast', credits: 1 },
-  { id: 'medium', label: 'Balanced', credits: 2 },
-  { id: 'high', label: 'Refined', credits: 4 },
+  { id: 'low', label: 'Fast' },
+  { id: 'medium', label: 'Balanced' },
+  { id: 'high', label: 'Refined' },
 ];
 
 type SheetSnapPoints = {
@@ -606,6 +611,7 @@ type ResultsBottomSheetProps = {
   imageQuality: RefineImageQuality;
   imageUrl: string;
   isRefining: boolean;
+  pricing: CreditPricing | null;
   onImageQualityChange: (quality: RefineImageQuality) => void;
   onRefineChange: (value: string) => void;
   onRefineSubmit: () => void;
@@ -623,6 +629,7 @@ function ResultsBottomSheet({
   imageQuality,
   imageUrl,
   isRefining,
+  pricing,
   onImageQualityChange,
   onRefineChange,
   onRefineSubmit,
@@ -758,6 +765,7 @@ function ResultsBottomSheet({
   );
 
   const canSubmitRefine = refineText.trim().length > 0 && !isRefining;
+  const isJewellery = isJewelleryGeneration(generation);
 
   const handleCopyAllFormatted = useCallback(() => {
     if (copyFields.length === 0) {
@@ -859,41 +867,72 @@ function ResultsBottomSheet({
               </View>
 
               <View style={styles.qualityHeader}>
-                <Text style={styles.qualityLabel}>QUALITY</Text>
-                <Text style={styles.qualityHint}>Default · cheapest</Text>
+                <Text style={styles.qualityLabel}>
+                  {isJewellery ? 'RESOLUTION' : 'QUALITY'}
+                </Text>
+                <Text style={styles.qualityHint}>
+                  {isJewellery ? 'Jewellery · 4K only' : 'Default · cheapest'}
+                </Text>
               </View>
 
               <View style={styles.qualityRow}>
-                {REFINE_QUALITY_OPTIONS.map(option => {
-                  const isSelected = imageQuality === option.id;
-                  return (
-                    <Pressable
-                      key={option.id}
-                      onPress={() => onImageQualityChange(option.id)}
+                {isJewellery ? (
+                  <Pressable style={[styles.qualityOption, styles.qualityOptionSelected]}>
+                    <Text
                       style={[
-                        styles.qualityOption,
-                        isSelected && styles.qualityOptionSelected,
+                        styles.qualityOptionLabel,
+                        styles.qualityOptionLabelSelected,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.qualityOptionLabel,
-                          isSelected && styles.qualityOptionLabelSelected,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.qualityOptionCredits,
-                          isSelected && styles.qualityOptionCreditsSelected,
-                        ]}
-                      >
-                        {option.credits}cr
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                      4K
+                    </Text>
+                    <Text
+                      style={[
+                        styles.qualityOptionCredits,
+                        styles.qualityOptionCreditsSelected,
+                      ]}
+                    >
+                      {refineShotCredits(pricing, 'high', '4K', true)}cr
+                    </Text>
+                  </Pressable>
+                ) : (
+                  REFINE_QUALITY_OPTIONS.map(option => {
+                      const isSelected = imageQuality === option.id;
+                      const credits = refineShotCredits(
+                        pricing,
+                        option.id,
+                        generation.imageSize,
+                        false,
+                      );
+                      return (
+                        <Pressable
+                          key={option.id}
+                          onPress={() => onImageQualityChange(option.id)}
+                          style={[
+                            styles.qualityOption,
+                            isSelected && styles.qualityOptionSelected,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.qualityOptionLabel,
+                              isSelected && styles.qualityOptionLabelSelected,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.qualityOptionCredits,
+                              isSelected && styles.qualityOptionCreditsSelected,
+                            ]}
+                          >
+                            {credits}cr
+                          </Text>
+                        </Pressable>
+                      );
+                    })
+                )}
               </View>
             </View>
           ) : null}
@@ -993,6 +1032,7 @@ function ShootResultsScreen({ navigation, route }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [refineText, setRefineText] = useState('');
   const [refineQuality, setRefineQuality] = useState<RefineImageQuality>('low');
+  const pricing = useCreditPricing();
   const [isRefining, setIsRefining] = useState(false);
   const [sheetCollapseToken, setSheetCollapseToken] = useState(0);
   const [infoSheetVisible, setInfoSheetVisible] = useState(false);
@@ -1118,10 +1158,13 @@ function ShootResultsScreen({ navigation, route }: Props) {
 
     setIsRefining(true);
     try {
-      const refined = await generationsApi.refine(activeGeneration.id, {
-        feedback,
-        imageQuality: refineQuality,
-      });
+      const jewellery = isJewelleryGeneration(activeGeneration);
+      const refined = await generationsApi.refine(
+        activeGeneration.id,
+        jewellery
+          ? { feedback, jewelryWorkflow: 'preset' }
+          : { feedback, imageQuality: refineQuality },
+      );
       const batchGeneration = refineResponseToBatchGeneration(refined);
       const newResult: BatchResultItem = {
         ok: true,
@@ -1302,6 +1345,7 @@ function ShootResultsScreen({ navigation, route }: Props) {
         imageQuality={refineQuality}
         imageUrl={activeGeneration.imageUrl}
         isRefining={isRefining}
+        pricing={pricing}
         onImageQualityChange={setRefineQuality}
         onRefineChange={setRefineText}
         onRefineSubmit={() => void handleRefineSubmit()}
